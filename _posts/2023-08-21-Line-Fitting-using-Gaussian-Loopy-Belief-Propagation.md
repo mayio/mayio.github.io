@@ -1,3 +1,13 @@
+---
+layout: post
+title: Line Fitting using Gaussian Loopy Belief Propagation
+subtitle: Algorithm and Python implementation
+tags: [Gaussian Loopy Belief Propagation]
+comments: false
+mathjax: true
+author: Mario Lüder
+---
+
 Gaussian Belief Propagation is a variant of Belief Propagation and used for inference on graphical models if the underlying distribution is described as a Gaussian.
 
 This article describes the implementation of the inference of a piecewiese separated Line using Gaussian Loopy Belief Propagation. The example is taken from [A visual introduction to Gaussian Belief Propagation](https://gaussianbp.github.io/). I work here with a stripped version of Joseph Ortiz's [notebook](https://colab.research.google.com/drive/1-nrE95X4UC9FBLR0-cTnsIP_XhA_PZKW?usp=sharing) in hope to make the implementation more comprehensible. My contribution is to explain what is going on in the code and relate it to the formulas and algorithms given in the [introduction](https://gaussianbp.github.io/) as the notebook contains mostly only code (as of now).
