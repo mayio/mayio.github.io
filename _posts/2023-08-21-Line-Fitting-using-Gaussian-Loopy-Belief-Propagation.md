@@ -2,6 +2,7 @@
 layout: post
 title: Line Fitting using Gaussian Loopy Belief Propagation
 subtitle: Algorithm and Python implementation
+date: '2023-08-21 12:00:00 +0200'
 comments: false
 mathjax: true
 author: Mario Lüder
@@ -16,12 +17,12 @@ This article describes the implementation of the inference of a piecewiese separ
 Please use the original notebook, if you want to experiment. It provides a very nice framework and you might want to use the functions I have deleted.
 
 Please see also my other articles on the topic, if you are not familiar with Belief Propagation. They provide very simple implementations of where discrete distributions are used.
-* [Loopy Belief Propagation - Python Implementation](https://mayio.github.io/graph/2022/09/17/Loopy-Belief-Propagation.html)
-* [Simple Noise Reduction with Loopy Belief Propagation](https://mayio.github.io/graph/2022/09/23/Noise-Reduction-Loopy-Belief-Propagation.html)
+* [Loopy Belief Propagation - Python Implementation](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation)
+* [Simple Noise Reduction with Loopy Belief Propagation](https://mayio.github.io/2022-09-23-Noise-Reduction-Loopy-Belief-Propagation)
 
 ## Implementation
 
-### Imports
+### Importsassets/img
 
 ```python
 import numpy as np
@@ -853,7 +854,7 @@ plt.show()
 
 
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/_posts/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_24_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_24_0.png)
     
 
 
@@ -921,7 +922,7 @@ plt.show()
     # Variable nodes: 20
     # Factors: 34
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/_posts/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_26_1.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_26_1.png)
 
 ### Solve with GBP
 
@@ -963,12 +964,12 @@ plt.show()
     Iter 25  --- Energy 13.41827 --- 
     Iter 26  --- Energy 13.41827 --- 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/_posts/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_28_1.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_28_1.png)
     
 ## References
 
 * [A visual introduction to Gaussian Belief Propagation](https://gaussianbp.github.io/) by Joseph Ortiz, Talfan Evans and Andrew J. Davison
-* [Loopy Belief Propagation - Python Implementation](https://mayio.github.io/graph/2022/09/17/Loopy-Belief-Propagation.html) by me on this blog
-* [Simple Noise Reduction with Loopy Belief Propagation](https://mayio.github.io/graph/2022/09/23/Noise-Reduction-Loopy-Belief-Propagation.html) by me on this blog
+* [Loopy Belief Propagation - Python Implementation](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation) by me on this blog
+* [Simple Noise Reduction with Loopy Belief Propagation](https://mayio.github.io/2022-09-23-Noise-Reduction-Loopy-Belief-Propagation) by me on this blog
 * [Pattern Recognition and Machine Learning](https://www.microsoft.com/en-us/research/uploads/prod/2006/01/Bishop-Pattern-Recognition-and-Machine-Learning-2006.pdf) by Christopher M. Bishop.
 * [Exactly Sparse Delayed-State Filters](https://www.researchgate.net/publication/221077974_Exactly_Sparse_Delayed-State_Filters) by Ryan M. Eustice et. al.

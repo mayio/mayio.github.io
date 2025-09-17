@@ -10,7 +10,7 @@ mathjax: true
 author: Mario Lüder
 ---
 
-I want to continue my previous [post](https://mayio.github.io/graph/2022/09/17/Loopy-Belief-Propagation.html) with a (useful) example to get more a feel how to use Loopy Belief Propagation in practice. 
+I want to continue my previous [post](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation) with a (useful) example to get more a feel how to use Loopy Belief Propagation in practice. 
 
 The aim is to remove noise from an image - which is only a toy example.
 
@@ -77,7 +77,7 @@ This takes just the probability of the observed pixel. $$s(white)$$ is $$0.6$$ i
 
 This implementation is naïve. It just aims to make things clear without the need of hiding the operations in optimizations.  
 
-Still I can simplify the code from previous [post](https://mayio.github.io/graph/2022/09/17/Loopy-Belief-Propagation.html) a little. I don't want to use the named tensor concept here. Simply because the names would be meaningless in this example. And also products can be simplified as the factors are two dimensional at maximum. Summing over the product becomes a matrix to vector multiplication - which I have shown in the previous post. Please see the section Factor-to-Variable Message Example 1.
+Still I can simplify the code from previous [post](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation/) a little. I don't want to use the named tensor concept here. Simply because the names would be meaningless in this example. And also products can be simplified as the factors are two dimensional at maximum. Summing over the product becomes a matrix to vector multiplication - which I have shown in the previous post. Please see the section Factor-to-Variable Message Example 1.
 
 
 ### Graph implementation
@@ -153,7 +153,7 @@ from skimage.color import rgb2gray
 from skimage.color import rgba2rgb
 import skimage
 
-loopy_image_array_rgb = io.imread('https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/_posts/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/loopy.png')
+loopy_image_array_rgb = io.imread('https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/loopy.png')
 loopy_image_array_rgb = skimage.util.random_noise(loopy_image_array_rgb, mode='pepper')
 loopy_image_array_gray = rgb2gray(rgba2rgb(loopy_image_array_rgb));
 loopy_image_array_bw =  (loopy_image_array_gray > 0.5) + 0.;
@@ -164,7 +164,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/_posts/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_12_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_12_0.png)
 
 
 The pixel values must be loaded into the incoming message of the "observed" factors. We reduce the probability a bit, as we are not shure about the right value.
@@ -355,7 +355,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/_posts/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_22_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_22_0.png)
 
 
 
@@ -370,7 +370,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/_posts/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_23_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_23_0.png)
 
 
 ## References
