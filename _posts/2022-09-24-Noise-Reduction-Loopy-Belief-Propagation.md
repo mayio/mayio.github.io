@@ -2,6 +2,7 @@
 layout: post
 title: 'Simple Noise Reduction with Loopy Belief Propagation'
 subtitle: Practical Example
+thumbnail-img: /assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_23_0.png
 date: '2022-09-24 00:00:00 +0200'
 excerpt_separator: <!--more-->
 categories: graph

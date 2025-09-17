@@ -2,6 +2,7 @@
 layout: post
 title: Line Fitting using Gaussian Loopy Belief Propagation
 subtitle: Algorithm and Python implementation
+thumbnail-img: /assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_28_1.png
 date: '2023-08-21 12:00:00 +0200'
 comments: false
 mathjax: true
