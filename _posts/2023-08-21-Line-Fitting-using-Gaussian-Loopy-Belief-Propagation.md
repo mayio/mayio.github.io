@@ -854,7 +854,7 @@ plt.show()
 
 
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_24_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_24_0.png)
     
 
 
@@ -922,7 +922,7 @@ plt.show()
     # Variable nodes: 20
     # Factors: 34
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/docs/assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_26_1.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_26_1.png)
 
 ### Solve with GBP
 
