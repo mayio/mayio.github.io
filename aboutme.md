@@ -8,7 +8,7 @@ subtitle: A small introduction
 
 Hi! I am Mario, a software engineer working in the field of object tracking for autonomous driving in Hamburg, Germany. 
 
-Cars can be equiped with laser scanners (short and long range) to get a detailed perception of their environment. Those sensors produce massive point clouds. My work is to extract objects, like cars, trucks, pedestrians, small obstacles from this data. It is about estimating their pose, shape and kinematics in real time, to enable autonomous driving.
+Cars can be equipped with laser scanners (short and long range) to get a detailed perception of their environment. Those sensors produce massive point clouds. My work is to extract objects, like cars, trucks, pedestrians, small obstacles from this data. It is about estimating their pose, shape and kinematics in real time, to enable autonomous driving.
 
 In the past years I got experienced in the fields of 
 * Multiple Extended Target Tracking
