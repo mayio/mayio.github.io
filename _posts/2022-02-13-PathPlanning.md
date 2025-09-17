@@ -2,6 +2,7 @@
 layout: post
 title: 'Path Planning with Quintic Functions in Frenét Coordinate System'
 subtitle: Introduction, Derivation and Code
+thumbnail-img: https://raw.githubusercontent.com/mayio/pathplanning/master/PathPlanningImages/FrenetFig2.png
 date: '2022-02-13 11:02:00 +0200'
 categories: pathplanning
 comments: false
