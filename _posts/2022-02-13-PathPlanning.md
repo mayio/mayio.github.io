@@ -1,9 +1,14 @@
 ---
 layout: post
 title: 'Path Planning with Quintic Functions in Frenét Coordinate System'
+subtitle: Introduction, Derivation and Code
 date: '2022-02-13 11:02:00 +0200'
 categories: pathplanning
+comments: false
+mathjax: true
+author: Mario Lüder
 ---
+
 
 This is an introduction on how to compute a driving path for an autonomous vehicle. In this article, I focus only the trajectory creation. Obstacle perception and avoidance shall be out of scope.
 

@@ -2,7 +2,6 @@
 layout: post
 title: Line Fitting using Gaussian Loopy Belief Propagation
 subtitle: Algorithm and Python implementation
-tags: [Gaussian Loopy Belief Propagation]
 comments: false
 mathjax: true
 author: Mario Lüder

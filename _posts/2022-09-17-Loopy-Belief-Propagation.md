@@ -1,8 +1,13 @@
 ---
 layout: post
 title: 'Loopy Belief Propagation - Python Implementation'
+subtitle: Practical Example
 date: '2022-09-17 11:02:00 +0200'
+excerpt_separator: <!--more-->
 categories: graph
+comments: false
+mathjax: true
+author: Mario Lüder
 ---
 
 This is about how to implement Loopy Belief Propagation in Python and to understand the calculations in detail.
