@@ -4,10 +4,6 @@ title: About me
 subtitle: A small introduction
 ---
 
-<!--
-<img  style="height:150px;width:150px;margin-left: 20px;margin-bottom: 20px;" align="right" alt="Mario Lüder" src="https://avatars.githubusercontent.com/u/8047224?v=4" >
--->
-
 Hello there! 
 
 I'm Mario, a software engineer working on Object Tracking — the core intelligence behind autonomous driving — in Hamburg, Germany.
