@@ -1,6 +1,18 @@
-# Faster Data Association with Max-Sum Loopy Belief Propagation (MASDA)
+---
+layout: post
+title: 'Faster Data Association with Max-Sum Loopy Belief Propagation (MASDA)'
+subtitle: Data Association with Misdetection and Clutter
+thumbnail-img: https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png
+date: '2025-11-26 18:60:00 +0200'
+categories: association
+comments: false
+mathjax: true
+author: Mario Lüder
+---
 
-This presents a data association algorithm I call MASDA (Max-Sum Algorithm Data Association) which relies on message passing in a factor graph. I derived the formula presented here using the very same approach as in the paper:
+This presents a data association algorithm I call MASDA (Max-Sum Algorithm Data Association) which relies on message passing in a factor graph. 
+
+I derived the formula presented here using the very same approach as in the paper:
 
 > Givoni, Inmar & Frey, Brendan. (2009). [A Binary Variable Model for Affinity Propagation](https://www.researchgate.net/publication/23975825_A_Binary_Variable_Model_for_Affinity_Propagation). Neural Computation. 21. 1589-1600. 10.1162/neco.2009.05-08-785.
 
@@ -49,163 +61,8 @@ Factor graphs provide a highly intuitive and graphical way to represent complex 
 The factor graph structure is highly modular. Each factor represents a local function or constraint, allowing for easy inclusion or modification of different aspects of the problem without redesigning the entire system. For instance, adding a new type of constraint (e.g., objects cannot be too close to each other) or a different similarity metric simply means adding a new factor or modifying an existing one.
 
 The factor graph below and the notation is used throughout this document.
-
-
-
-```python
-# @title Factor Graph
-
-import networkx as nx
-import matplotlib.pyplot as plt
-import numpy as np
-
-# --- 1. Define the graph structure ---
-
-# Create an empty graph
-G = nx.Graph()
-
-# Define variable nodes (circles) with attributes
-variables_with_attrs = [('$c_{11}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(10,30)}),
-                        ('$c_{1j}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(20,30)}),
-                        ('$c_{1n}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(30,30)}),
-                        ('$e_{1}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(40,30)}),
-                        ('$c_{i1}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(10,20)}),
-                        ('$c_{ij}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(20,20)}),
-                        ('$c_{in}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(30,20)}),
-                        ('$e_{i}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(40,20)}),
-                        ('$c_{m1}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(10,10)}),
-                        ('$c_{mj}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(20,10)}),
-                        ('$c_{mn}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(30,10)}),
-                        ('$e_{m}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(40,10)}),
-                        ('$d_{1}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(10,0)}),
-                        ('$d_{j}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(20,0)}),
-                        ('$d_{n}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(30,0)})]
-
-G.add_nodes_from(variables_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define similarity factors
-similarity_factors_with_attrs = [('$s_{11}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(13,33)}),
-                                 ('$s_{1j}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(23,33)}),
-                                 ('$s_{1n}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(33,33)}),
-                                 ('$\\Lambda_{1}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(43,33)}),
-                                 ('$s_{i1}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(13,23)}),
-                                 ('$s_{ij}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(23,23)}),
-                                 ('$s_{in}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(33,23)}),
-                                 ('$\\Lambda_{i}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(43,23)}),
-                                 ('$s_{m1}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(13,13)}),
-                                 ('$s_{mj}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(23,13)}),
-                                 ('$s_{mn}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(33,13)}),
-                                 ('$\\Lambda_{m}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(43,13)}),
-                                 ('$\\Gamma_{1}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(13,3)}),
-                                 ('$\\Gamma_{j}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(23,3)}),
-                                 ('$\\Gamma_{n}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(33,3)})]
-
-
-G.add_nodes_from(similarity_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define define E and I constraints factors
-constraint_factors_with_attrs = [('$E_{1}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(7,20)}),
-                      ('$E_{j}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(17,20)}),
-                      ('$E_{n}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(27,20)}),
-                      ('$I_{1}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(20,27)}),
-                      ('$I_{i}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(20,17)}),
-                      ('$I_{m}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(20,7)})]
-G.add_nodes_from(constraint_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Add edges between similary factors and accociation variables
-G.add_edge('$c_{11}$', '$s_{11}$')
-G.add_edge('$c_{1j}$', '$s_{1j}$')
-G.add_edge('$c_{1n}$', '$s_{1n}$')
-G.add_edge('$e_{1}$', '$\\Lambda_{1}$')
-G.add_edge('$c_{i1}$', '$s_{i1}$')
-G.add_edge('$c_{ij}$', '$s_{ij}$')
-G.add_edge('$c_{in}$', '$s_{in}$')
-G.add_edge('$e_{i}$', '$\\Lambda_{i}$')
-G.add_edge('$c_{m1}$', '$s_{m1}$')
-G.add_edge('$c_{mj}$', '$s_{mj}$')
-G.add_edge('$c_{mn}$', '$s_{mn}$')
-G.add_edge('$e_{m}$', '$\\Lambda_{m}$')
-G.add_edge('$d_{1}$', '$\\Gamma_{1}$')
-G.add_edge('$d_{j}$', '$\\Gamma_{j}$')
-G.add_edge('$d_{n}$', '$\\Gamma_{n}$')
-
-G.add_edge('$c_{11}$', '$I_{1}$')
-G.add_edge('$c_{1j}$', '$I_{1}$')
-G.add_edge('$c_{1n}$', '$I_{1}$')
-G.add_edge('$e_{1}$', '$I_{1}$')
-G.add_edge('$c_{i1}$', '$I_{i}$')
-G.add_edge('$c_{ij}$', '$I_{i}$')
-G.add_edge('$c_{in}$', '$I_{i}$')
-G.add_edge('$e_{i}$', '$I_{i}$')
-G.add_edge('$c_{m1}$', '$I_{m}$')
-G.add_edge('$c_{mj}$', '$I_{m}$')
-G.add_edge('$c_{mn}$', '$I_{m}$')
-G.add_edge('$e_{m}$', '$I_{m}$')
-
-G.add_edge('$c_{11}$', '$E_{1}$')
-G.add_edge('$c_{1j}$', '$E_{j}$')
-G.add_edge('$c_{1n}$', '$E_{n}$')
-G.add_edge('$c_{i1}$', '$E_{1}$')
-G.add_edge('$c_{ij}$', '$E_{j}$')
-G.add_edge('$c_{in}$', '$E_{n}$')
-G.add_edge('$c_{m1}$', '$E_{1}$')
-G.add_edge('$c_{mj}$', '$E_{j}$')
-G.add_edge('$c_{mn}$', '$E_{n}$')
-G.add_edge('$d_{1}$', '$E_{1}$')
-G.add_edge('$d_{j}$', '$E_{j}$')
-G.add_edge('$d_{n}$', '$E_{n}$')
-
-# --- 2. Set up node attributes for drawing ---
-
-# Differentiate node types for drawing (e.g., color, shape)
-variable_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'variable']
-factor_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'factor']
-
-# --- 3. Draw the graph ---
-
-plt.figure(figsize=(12, 10))
-
-# Define a layout for the nodes
-pos=nx.get_node_attributes(G,'pos')
-
-# Draw variable nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=variable_nodes,
-                       node_size=2000,       # Scalar size for variable nodes
-                       node_shape='o',      # Circle shape for variable nodes
-                       node_color='lightblue', # Color for variable nodes
-                       alpha=0.9)
-
-# Draw factor nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=factor_nodes,
-                       node_size=1000,       # Scalar size for factor nodes
-                       node_shape='s',      # Square shape for factor nodes
-                       node_color='lightcoral',# Color for factor nodes
-                       alpha=0.9)
-
-# Draw edges
-nx.draw_networkx_edges(G, pos, width=1.5, edge_color='gray', alpha=0.9)
-
-# Draw labels
-nx.draw_networkx_labels(G, pos, font_size=10, font_weight='bold')
-
-# Add legend manually
-from matplotlib.lines import Line2D
-legend_elements = [Line2D([0], [0], marker='o', color='w', label='Variables',
-                          markerfacecolor='lightblue', markersize=15),
-                   Line2D([0], [0], marker='s', color='w', label='Factors',
-                          markerfacecolor='lightcoral', markersize=15)]
-plt.legend(handles=legend_elements)
-
-plt.title("Association Factor Graph")
-plt.axis('off') # Hide the axis
-plt.show()
-```
-
-
     
-![png](2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png)
     
 
 
@@ -363,332 +220,14 @@ $$
 \mu_{f_l\rightarrow x}(x) = \max_{x_1,\dots,x_M}\left[f(x, x_1, \dots, x_m) + \sum_{\{m|x_m \in \text{ne}(f) \setminus x\}}\right]
 $$
 
-
-```python
-# @title Message graph: measurement to object
-import itertools as it
-
-# Create an empty graph
-G = nx.MultiDiGraph()
-
-# Define variable nodes (circles) with attributes
-variables_with_attrs = [('$c_{ij}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(20,20)})]
-G.add_nodes_from(variables_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define similarity factors
-similarity_factors_with_attrs = [('$s_{ij}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(22,22)})]
-G.add_nodes_from(similarity_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define define E and I constraints factors
-constraint_factors_with_attrs = [('$E_{j}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(17,20)}),
-                                 ('$I_{i}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(20,17)})]
-
-G.add_nodes_from(constraint_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Add edges between similary factors and accociation variables
-connectionstyle = [f"arc3,rad={r}" for r in it.accumulate([0.15] * 4)]
-
-
-G.add_edge('$c_{ij}$', '$I_{i}$')
-G.add_edge('$c_{ij}$', '$E_{j}$')
-G.add_edge('$s_{ij}$', '$c_{ij}$')
-G.add_edge('$I_{i}$', '$c_{ij}$')
-G.add_edge('$E_{j}$', '$c_{ij}$')
-
-# --- 2. Set up node attributes for drawing ---
-
-# Differentiate node types for drawing (e.g., color, shape)
-variable_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'variable']
-factor_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'factor']
-
-# --- 3. Draw the graph ---
-
-plt.figure(figsize=(12, 10))
-
-# Define a layout for the nodes
-pos=nx.get_node_attributes(G,'pos')
-
-# Draw variable nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=variable_nodes,
-                       node_size=2000,       # Scalar size for variable nodes
-                       node_shape='o',      # Circle shape for variable nodes
-                       node_color='lightblue', # Color for variable nodes
-                       alpha=0.9)
-
-# Draw factor nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=factor_nodes,
-                       node_size=1000,       # Scalar size for factor nodes
-                       node_shape='s',      # Square shape for factor nodes
-                       node_color='lightcoral',# Color for factor nodes
-                       alpha=0.9)
-
-edge_labels={('$c_{ij}$', '$I_{i}$'):  '$\\beta_{ij}$',
-             ('$c_{ij}$', '$E_{j}$'):  '$\\rho_{ij}$',
-             ('$s_{ij}$', '$c_{ij}$'): '$s_{ij}$',
-             ('$I_{i}$', '$c_{ij}$'):  '$\\eta_{ij}$',
-             ('$E_{j}$', '$c_{ij}$'):  '$\\alpha_{ij}$'}
-
-
-# Draw edges
-nx.draw_networkx_edges(G,
-                       pos,
-                       width=1.5,
-                       edge_color='gray',
-                       alpha=0.9,
-                       connectionstyle=connectionstyle,
-                       node_size=[2000, 1000, 1000, 1000, 1000])
-
-nx.draw_networkx_edge_labels(
-    G,
-    pos,
-    edge_labels,
-    connectionstyle=connectionstyle,
-    font_size=10,
-    label_pos=0.5,
-    font_color="black",
-    bbox={"alpha": 0},
-)
-
-
-# Draw labels
-nx.draw_networkx_labels(G, pos, font_size=10, font_weight='bold')
-
-
-# Add legend manually
-from matplotlib.lines import Line2D
-legend_elements = [Line2D([0], [0], marker='o', color='w', label='Variables',
-                          markerfacecolor='lightblue', markersize=15),
-                   Line2D([0], [0], marker='s', color='w', label='Factors',
-                          markerfacecolor='lightcoral', markersize=15)]
-plt.legend(handles=legend_elements)
-
-plt.title("Messages in the factor graph")
-plt.axis('off') # Hide the axis
-plt.show()
-```
-
-
     
-![png](2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_10_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_10_0.png)
     
-
-
-
-```python
-# @title Message graph: object is misdetected
-import itertools as it
-
-# Create an empty graph
-G = nx.MultiDiGraph()
-
-# Define variable nodes (circles) with attributes
-variables_with_attrs = [('$d_{j}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(20,20)})]
-G.add_nodes_from(variables_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define similarity factors
-similarity_factors_with_attrs = [('$\\Gamma_{j}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(22,22)})]
-G.add_nodes_from(similarity_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define define E and I constraints factors
-constraint_factors_with_attrs = [('$E_{j}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(17,20)})]
-
-G.add_nodes_from(constraint_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Add edges between similary factors and accociation variables
-connectionstyle = [f"arc3,rad={r}" for r in it.accumulate([0.15] * 4)]
-
-
-G.add_edge('$d_{j}$', '$E_{j}$')
-G.add_edge('$\\Gamma_{j}$', '$d_{j}$')
-G.add_edge('$E_{j}$', '$d_{j}$')
-
-# --- 2. Set up node attributes for drawing ---
-
-# Differentiate node types for drawing (e.g., color, shape)
-variable_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'variable']
-factor_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'factor']
-
-# --- 3. Draw the graph ---
-
-plt.figure(figsize=(10, 8))
-
-# Define a layout for the nodes
-pos=nx.get_node_attributes(G,'pos')
-
-# Draw variable nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=variable_nodes,
-                       node_size=2000,       # Scalar size for variable nodes
-                       node_shape='o',      # Circle shape for variable nodes
-                       node_color='lightblue', # Color for variable nodes
-                       alpha=0.9)
-
-# Draw factor nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=factor_nodes,
-                       node_size=1000,       # Scalar size for factor nodes
-                       node_shape='s',      # Square shape for factor nodes
-                       node_color='lightcoral',# Color for factor nodes
-                       alpha=0.9)
-
-edge_labels={('$d_{j}$', '$E_{j}$'):  '$\\rho_{m+1, j}$',
-             ('$\\Gamma_{j}$', '$d_{j}$'): '$\\gamma_{j}$',
-             ('$E_{j}$', '$d_{j}$'):  '$\\alpha_{m+1, j}$'}
-
-
-# Draw edges
-nx.draw_networkx_edges(G,
-                       pos,
-                       width=1.5,
-                       edge_color='gray',
-                       alpha=0.9,
-                       connectionstyle=connectionstyle,
-                       node_size=[2000, 1000, 1000, 1000])
-
-nx.draw_networkx_edge_labels(
-    G,
-    pos,
-    edge_labels,
-    connectionstyle=connectionstyle,
-    font_size=10,
-    label_pos=0.5,
-    font_color="black",
-    bbox={"alpha": 0},
-)
-
-
-# Draw labels
-nx.draw_networkx_labels(G, pos, font_size=10, font_weight='bold')
-
-
-# Add legend manually
-from matplotlib.lines import Line2D
-legend_elements = [Line2D([0], [0], marker='o', color='w', label='Variables',
-                          markerfacecolor='lightblue', markersize=15),
-                   Line2D([0], [0], marker='s', color='w', label='Factors',
-                          markerfacecolor='lightcoral', markersize=15)]
-plt.legend(handles=legend_elements)
-
-plt.title("Messages in the factor graph")
-plt.axis('off') # Hide the axis
-plt.show()
-```
-
-
     
-![png](2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_11_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_11_0.png)
     
-
-
-
-```python
-# @title Message graph: measurement is clutter or a new born object
-import itertools as it
-
-# Create an empty graph
-G = nx.MultiDiGraph()
-
-# Define variable nodes (circles) with attributes
-variables_with_attrs = [('$e_{i}$', {'bipartite': 0, 'node_type': 'variable', 'pos':(20,20)})]
-G.add_nodes_from(variables_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define similarity factors
-similarity_factors_with_attrs = [('$\\Lambda_{i}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(22,22)})]
-G.add_nodes_from(similarity_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Define define E and I constraints factors
-constraint_factors_with_attrs = [('$I_{i}$', {'bipartite': 0, 'node_type': 'factor', 'pos':(20,17)})]
-
-G.add_nodes_from(constraint_factors_with_attrs) # Use add_nodes_from with a list of (node, attribute_dict) tuples
-
-# Add edges between similary factors and accociation variables
-connectionstyle = [f"arc3,rad={r}" for r in it.accumulate([0.15] * 4)]
-
-
-G.add_edge('$e_{i}$', '$I_{i}$')
-G.add_edge('$\\Lambda_{i}$', '$e_{i}$')
-G.add_edge('$I_{i}$', '$e_{i}$')
-
-# --- 2. Set up node attributes for drawing ---
-
-# Differentiate node types for drawing (e.g., color, shape)
-variable_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'variable']
-factor_nodes = [n for n, d in G.nodes(data=True) if d['node_type'] == 'factor']
-
-# --- 3. Draw the graph ---
-
-plt.figure(figsize=(10, 8))
-
-# Define a layout for the nodes
-pos=nx.get_node_attributes(G,'pos')
-
-# Create a list of node sizes based on node type
-node_sizes = [2000 if G.nodes[n]['node_type'] == 'variable' else 1000 for n in G.nodes()]
-
-# Draw variable nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=variable_nodes,
-                       node_size=2000,       # Scalar size for variable nodes
-                       node_shape='o',      # Circle shape for variable nodes
-                       node_color='lightblue', # Color for variable nodes
-                       alpha=0.9)
-
-# Draw factor nodes
-nx.draw_networkx_nodes(G, pos,
-                       nodelist=factor_nodes,
-                       node_size=1000,       # Scalar size for factor nodes
-                       node_shape='s',      # Square shape for factor nodes
-                       node_color='lightcoral',# Color for factor nodes
-                       alpha=0.9)
-
-edge_labels={('$e_{i}$', '$I_{i}$'):  '$\\beta_{i,n+1}$',
-             ('$\\Lambda_{i}$', '$e_{i}$'): '$\\lambda_{i}$',
-             ('$I_{i}$', '$e_{i}$'):  '$\\eta_{i,n+1}$'}
-
-
-# Draw edges
-nx.draw_networkx_edges(G,
-                       pos,
-                       width=1.5,
-                       edge_color='gray',
-                       alpha=0.9,
-                       connectionstyle=connectionstyle,
-                       node_size=node_sizes)
-
-nx.draw_networkx_edge_labels(
-    G,
-    pos,
-    edge_labels,
-    connectionstyle=connectionstyle,
-    font_size=10,
-    label_pos=0.5,
-    font_color="black",
-    bbox={"alpha": 0},
-)
-
-
-# Draw labels
-nx.draw_networkx_labels(G, pos, font_size=10, font_weight='bold')
-
-
-# Add legend manually
-from matplotlib.lines import Line2D
-legend_elements = [Line2D([0], [0], marker='o', color='w', label='Variables',
-                          markerfacecolor='lightblue', markersize=15),
-                   Line2D([0], [0], marker='s', color='w', label='Factors',
-                          markerfacecolor='lightcoral', markersize=15)]
-plt.legend(handles=legend_elements)
-
-plt.title("Messages in the factor graph")
-plt.axis('off') # Hide the axis
-plt.show()
-```
-
-
     
-![png](2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_12_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_12_0.png)
     
 
 
@@ -977,9 +516,8 @@ I provide here a naive implementation focussing on understanding the algorithm. 
 
 The problem shown here is an artificial one. There are five measurements, given as two-dimensional position. We got as well four object positions in 2D. The one-to-one association of measurements and objects might appear ambiguous for the human eye. One measurement can be associated to exacly one object or is clutter/new born. One object can be associated to exactly one measurement or is misdetected. Using just the euclidean distance might lead to a violation of these constraints.
 
-
+### Includes
 ```python
-# @title Includes
 import numpy as np
 import torch
 import random
@@ -988,10 +526,9 @@ import matplotlib.pyplot as plt
 import sys
 ```
 
+### Measurements and Objects
 
 ```python
-# @title Measurements and Objects
-
 # Measurements
 points = torch.tensor([
     [40.1732, 3.66123],
@@ -1029,17 +566,13 @@ plt.legend()
 plt.grid(True)
 plt.show()
 ```
-
-
     
-![png](2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_25_0.png)
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_25_0.png)
     
 
-
+### Shuffle the measurements and object
 
 ```python
-# @title shuffle the measurements and object
-
 # Get the number of measurements and objects
 num_measurements = meas_x.shape[0]
 num_objects = objs_x.shape[0]
@@ -1057,10 +590,9 @@ shuffled_objs_y = objs_y[shuffled_objs_indices]
 
 ```
 
+### Compute a distance matrix using the shuffeled measurements
 
 ```python
-# @title compute a distance matrix using the shuffeled measurements
-
 # Reshape shuffled measurements and objects for broadcasting
 shuffled_meas = torch.stack((shuffled_meas_x, shuffled_meas_y), dim=1)
 shuffled_objs = torch.stack((shuffled_objs_x, shuffled_objs_y), dim=1)
@@ -1101,10 +633,9 @@ distance_matrix
 
 
 
+### MASDA - iteration and compute the belief
 
 ```python
-# @title MASDA - iteration and compute the belief
-
 # both beta and rho matrices are initialized with a large positive value (1e+3)
 # for all their elements. In the context of the Max-Sum algorithm, where
 # messages represent scores or preferences, initializing with a large positive
@@ -1227,9 +758,9 @@ compute_belief()
 # print(belief)
 ```
 
+### Plot the association
 
 ```python
-# @title Plot the association
 # get the maximum index from beta and plot the point association using this information
 
 beta_misdetection = torch.cat((beta, torch.ones(num_measurements, 1) * misdetection), dim=1) # column for clutter
@@ -1272,11 +803,8 @@ plt.grid(True)
 plt.show()
 ```
 
-
+![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_29_0.png)
     
-![png](2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_29_0.png)
-    
-
 
 ### Discussion
 
