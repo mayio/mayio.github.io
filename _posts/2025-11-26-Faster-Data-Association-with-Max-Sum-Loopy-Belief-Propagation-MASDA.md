@@ -3,7 +3,7 @@ layout: post
 title: 'Faster Data Association with Max-Sum Loopy Belief Propagation (MASDA)'
 subtitle: Data Association with Misdetection and Clutter
 thumbnail-img: https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png
-date: '2025-11-26 18:60:00 +0200'
+date: '2025-11-26 18:50:00 +0200'
 categories: association
 comments: false
 mathjax: true
