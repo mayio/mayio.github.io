@@ -60,7 +60,7 @@ Factor graphs provide a highly intuitive and graphical way to represent complex 
 
 The factor graph structure is highly modular. Each factor represents a local function or constraint, allowing for easy inclusion or modification of different aspects of the problem without redesigning the entire system. For instance, adding a new type of constraint (e.g., objects cannot be too close to each other) or a different similarity metric simply means adding a new factor or modifying an existing one.
 
-The factor graph below and the notation is used throughout this document.
+The factor graph below and the notation is used throughout this article.
     
 ![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png)
     
@@ -297,6 +297,7 @@ $$
 $$
 
 Scalar message
+
 $$
 \begin{align}
 \beta_{ij} & = \beta_{ij}(1) - \beta_{ij}(0) \\
@@ -326,8 +327,6 @@ There is no message to the $$S$$ factor at it is used as a prior.
 ### Factor to Variable Messages
 
 We make use of the previously given factor to variable message update equation. Again, we will fix $$c_{ij}$$ to $$0$$ and $$1$$ respectively. Any combination that violates the constraints evaluates to $$\infty$$ and is non optimal.
-
-
 
 
 #### From $$I$$
@@ -454,6 +453,7 @@ b_{ij} = \alpha_{ij} + \eta_{ij} + s_{ij}
 $$
 
 Belief measurement is clutter or a new born object
+
 $$
 b_{i,n+1} = \eta_{i,n+1} + \lambda_{i}
 $$
@@ -465,11 +465,9 @@ b_{m + 1, j} = \alpha_{m+1, j} + \gamma_{j}
 $$
 
 
-
 ### Iterative Process
 
 These messages $$\beta$$ and $$\rho$$ are iteratively updated until convergence or for a fixed number of iterations. As messages propagate, information about similarities, clutter/misdetection likelihoods, and constraints are shared across the graph. This allows the algorithm to find a globally consistent assignment that satisfies as many preferences and constraints as possible.
-
 
 
 ### Final Beliefs and Assignment
@@ -514,7 +512,7 @@ The message computations in SPADA represent probability distributions, adding to
 
 I provide here a naive implementation focussing on understanding the algorithm. Major optimizations are possible, especially when implementing it for sparse matrices.
 
-The problem shown here is an artificial one. There are five measurements, given as two-dimensional position. We got as well four object positions in 2D. The one-to-one association of measurements and objects might appear ambiguous for the human eye. One measurement can be associated to exacly one object or is clutter/new born. One object can be associated to exactly one measurement or is misdetected. Using just the euclidean distance might lead to a violation of these constraints.
+The problem shown here is an artificial one. Five measurements are given as two-dimensional positions. We got as well four object positions in 2D. The one-to-one association of measurements with objects might appear ambiguous for the human eye. One measurement can be associated to exacly one object or is clutter/new born. One object can be associated to exactly one measurement or is misdetected. Using just the euclidean distance might lead to a violation of these constraints.
 
 ### Includes
 ```python
