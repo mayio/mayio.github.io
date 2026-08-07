@@ -43,9 +43,7 @@ Results, briefly:
 
 The synthetic half runs from one script with no input images, so the disparity is
 known exactly. The real half uses Middlebury's Teddy and Cones, which ship
-quarter-pixel ground truth and come with explicit permission to publish; they
-download themselves on first run. One command regenerates every table and figure
-below.
+quarter-pixel ground truth.
 
 ---
 
