@@ -30,9 +30,10 @@ Results, briefly:
   matches on ambiguous texture, and 1-7% more where descriptors discriminate.
 - Precision collapses for every method on ambiguous texture, including the exact
   solver. Uniqueness is real information but it is not sufficient information.
-- Adding an ordering factor is cheap and it works, in that crossings drop. It does
-  not improve accuracy, because a bounded disparity range has already removed almost
-  all of them.
+- An ordering factor folds into the same closed form for one clamped scalar per
+  conflicting edge. On eight real scenes it cuts crossings by a third and returns
+  about 1% more correct matches. On my synthetic scenes it looked useless or harmful,
+  which says more about synthetic scenes than about ordering.
 - The speed advantage depends entirely on representation. A dense implementation is
   slower than scipy's Jonker-Volgenant; the same algorithm on an edge list is
   157-230× faster.
@@ -231,6 +232,14 @@ maps on this website."
 > D. Scharstein and R. Szeliski (2003). *High-accuracy stereo depth maps using
 > structured light.* CVPR, 195-202.
 > [doi:10.1109/CVPR.2003.1211354](https://doi.org/10.1109/CVPR.2003.1211354)
+
+§7 needs more than two scenes, so it also uses the six Middlebury 2005 scenes: Art,
+Books, Dolls, Laundry, Moebius and Reindeer, at third size. Those ship no documented
+disparity scale in the two-view archive, so the factor of 3 is established rather than
+assumed: for a pixel at $$x$$ in the left view with true disparity $$t$$, the right
+view's disparity map at $$x - t$$ must also read $$t$$. That identity holds to a median
+of 0.000 px at a scale of 3 and fails at every other integer, and it involves no
+matcher, so it cannot flatter the results.
 
 Ground truth on real data needs one more piece of care than on synthetic data.
 Middlebury marks unknown disparity as zero rather than shipping a separate
@@ -666,8 +675,8 @@ follow.
 
 Scanline stereo methods use the ordering constraint: matches along a scanline should
 not cross. Plain MASDA cannot express it, which is a standing objection to using it
-for stereo. It can be added as a factor, the derivation is tidier than I expected, and it
-turns out not to be worth using.
+for stereo. It can be added as a factor, the derivation is tidier than I expected, and whether
+it is worth using depends on which data you ask.
 
 Two associations $$(i,j)$$ and $$(i',j')$$ cross iff $$(x_i - x_{i'})(x_j - x_{j'}) < 0$$.
 A matching is order-preserving exactly when no two of its pairs cross, so ordering
@@ -698,7 +707,7 @@ $$\kappa$$ stays finite. Thin foreground objects genuinely violate ordering, and
 hard constraint would delete them. Damping goes up to 0.6, because these factors add
 loops that the bipartite convergence result does not cover.
 
-### 7.1 It works, and it does not improve accuracy
+### 7.1 On synthetic scenes it works and does not improve accuracy
 
 The lattice is an unfair test on its own, because repetitive mistakes tend to be
 order-preserving: a region shifted by one period crosses nothing. So there is a
@@ -707,7 +716,7 @@ broadband texture, where errors do cross.
 
 Both scenes are run over five random seeds, and what is reported is the *paired*
 difference against the same scene with the factor off. That is not decoration. The
-first two times I measured this I got opposite answers, and §7.3 explains why.
+first two times I measured this I got opposite answers, and §7.4 explains why.
 
 **Thin bars**, the scene built to favour ordering. Baseline: 512.0 ± 31.2 correct,
 50.8 ± 11.3 crossings out of roughly 2800 same-band pairs.
@@ -734,41 +743,92 @@ match in 512, smaller than its own spread across seeds, so the honest reading is
 "no effect". On repetitive texture it is consistently negative, −6 to −7 in every
 seed.
 
-The real pairs agree, single scene each so no error bars: Teddy 211 → 214 correct
-with crossings 44 → 30, Cones 336 → 335 with crossings 11 → 8. Crossings down,
-accuracy flat.
+On this evidence I concluded the factor was not worth switching on. That conclusion
+was wrong, and §7.2 is why.
 
-### 7.2 Why it does not help
+### 7.2 On real data it does help, slightly
 
-The thin-bars baseline has 50.8 crossings out of ~2800 same-band pairs, 1.8%. There
-was very little for the constraint to fix, and the crossings it removes are
-apparently not the wrong matches.
+The synthetic answer is not the real answer, which I only found because two scenes
+with no error bars is not a measurement either. Middlebury 2005 supplies six more
+scenes with structured-light ground truth under the same licence, so the real side
+gets eight scenes and the same paired treatment.
 
-That is not a property of the scene. Matches $$(i,j)$$ and $$(i',j')$$ with
-$$x_i < x_{i'}$$ cross iff $$x_j > x_{j'}$$, that is
+Paired difference against the same scene with the factor off, over Teddy, Cones, Art,
+Books, Dolls, Laundry, Moebius and Reindeer:
+
+| $$\kappa$$ | Δ correct | Δ crossings | crossings retained |
+|---|---|---|---|
+| 0.1 | +1.9 ± 2.3 | −12.4 ± 11.7 | 0.75× |
+| 0.3 | +2.1 ± 2.3 | −16.8 ± 16.6 | 0.64× |
+| 0.8 | +2.2 ± 2.5 | −17.6 ± 16.5 | 0.62× |
+
+At $$\kappa = 0.3$$ the factor is better on 6 scenes, worse on 1, unchanged on 1. The
+mean is +2.1 correct per scene against baselines of 114 to 336, so about +0.9%, with
+a standard error of 0.85 and a one-sample $$t$$ of 2.49, $$p = 0.042$$.
+
+That is a small effect with marginal significance on eight scenes, and I would not
+build anything on the $$p$$-value alone. What makes it believable is the consistency:
+it never costs more than one match, and it cuts crossings by a third on every scene.
+
+So the honest summary is the opposite of what the synthetic scenes said. On real
+imagery an ordering factor is worth switching on. It is cheap, it removes a third of
+the crossings, and it returns about one percent more correct matches.
+
+### 7.3 Why the two disagree
+
+Matches $$(i,j)$$ and $$(i',j')$$ with $$x_i < x_{i'}$$ cross iff $$x_j > x_{j'}$$, that is
 
 $$
 d_{i'} - d_i \;>\; x_{i'} - x_i
 $$
 
-A crossing requires the disparity difference to exceed the horizontal separation.
-With disparities confined to a range of width $$d_{\max} - d_{\min}$$, crossings are only
-possible between keypoints closer together in $$x$$ than that width, and get rarer as
-the range tightens.
+A crossing needs the disparity difference to exceed the horizontal separation. With
+disparities confined to a range of width $$d_{\max} - d_{\min}$$, crossings are only
+possible between keypoints closer together in $$x$$ than that width. That bound is real,
+and it was my original explanation for why ordering was redundant: the disparity gate
+has already forbidden most crossings, so there is little left to fix.
 
-So the disparity-range gate already does most of ordering's work. Uniqueness plus a
-bounded disparity range gives largely ordered solutions for free, and the few
-crossings left over are as likely to be correct as not: the nine thin bars in this
-scene violate ordering *legitimately*, and a factor that penalises crossings cannot
-tell those apart from crossings caused by mismatches.
+The eight real scenes do not support that explanation. If gate width governed the
+crossing rate, the six scenes gated at 80 px should cross more than the two gated at
+60. The correlation is +0.50 with $$p = 0.21$$, which on eight points is nothing.
 
-Ordering is therefore expressible, cleanly, inside the existing closed form, and not
-worth switching on in a geometrically gated sparse matcher. I would still expect it
-to pay where the gating is weak: a wide disparity range, an uncalibrated pair, or
-two-dimensional temporal association, where nothing constrains ordering for free.
-Here it costs accuracy to buy a statistic nobody consumes.
+What does predict the crossing rate is the *error* rate:
 
-### 7.3 A note on measuring small effects
+| scene | precision | crossings / same-band pair |
+|---|---|---|
+| Cones | 0.781 | 1.3% |
+| Dolls | 0.689 | 2.5% |
+| Books | 0.704 | 4.6% |
+| Teddy | 0.615 | 4.6% |
+| Moebius | 0.680 | 4.9% |
+| Art | 0.489 | 5.1% |
+| Reindeer | 0.592 | 7.4% |
+| Laundry | 0.301 | 9.3% |
+
+Spearman $$\rho = -0.86$$, $$p = 0.0065$$. Crossings are mostly a *symptom* of wrong
+matches, not an independent property of the geometry. That is why penalising them
+removes wrong matches, and why the effect is larger on the scenes that need it most.
+
+It also explains the synthetic result, and why it pointed the wrong way. On a
+periodic lattice the errors are order-*preserving*: a patch matched one period to the
+left crosses nothing, because every keypoint in it shifts by the same amount. So the
+factor finds no wrong matches to remove and spends its influence perturbing correct
+ones, which is exactly the −6 it costs. The lattice is not a hard case for ordering,
+it is a case where ordering is blind.
+
+I had flagged the lattice as an unfair test and then built the thin-bars scene to
+compensate. That was the right instinct and it was not enough: thin bars violate
+ordering legitimately, so they penalise the factor from the other direction. Between
+a scene where ordering cannot see the errors and a scene where the true answer breaks
+the constraint, both of my synthetic tests were adversarial to it in ways real scenes
+are not.
+
+Ordering is therefore expressible, cleanly, inside the existing closed form, cheap
+enough to leave on, and worth about a percent on real imagery. I would still expect
+it to matter more where the gating is weak: an uncalibrated pair, or two-dimensional
+temporal association, where nothing constrains ordering for free.
+
+### 7.4 A note on measuring small effects
 
 The scene-to-scene spread on thin bars is ±31 correct matches. The ordering effect is
 about 1. I first reported this experiment from a single scene and got "+6, it helps";
@@ -786,6 +846,13 @@ exotic. A single-seed experiment on a procedural scene reports a property of tha
 scene, and if the effect you are chasing is smaller than the scene-to-scene variance,
 you will get whichever sign you happened to draw. Error bars over seeds cost almost
 nothing here and would have caught it immediately.
+
+The second lesson cost me the conclusion itself. I applied that treatment to the
+synthetic scenes and then reported the real result from two scenes with no spread at
+all, and the two-scene answer was the wrong sign. Generating replicates is cheap when
+a script makes the scene and expensive when a lab did, which is precisely why the
+real side is the one that gets left at n = 2. Middlebury 2005 was six more scenes and
+one afternoon.
 
 ---
 
@@ -849,10 +916,11 @@ Where MASDA is the right choice:
   needing to be.
 - It is anytime. A handful of iterations gives a usable answer, and the decision
   stabilises well before the messages do.
-- It extends. Adding an ordering, smoothness or temporal factor keeps a factor graph
-  a factor graph, whereas it stops being a LAP. §7 is the demonstration: a new
-  pairwise constraint cost one clamped scalar per conflicting edge and no change to
-  the update structure.
+- It extends, and this is the main reason to prefer it over an exact LAP solver.
+  Adding an ordering, smoothness or temporal factor keeps a factor graph a factor
+  graph, whereas it stops being an assignment problem. §7 is the demonstration: a new
+  pairwise constraint cost one clamped scalar per conflicting edge, no change to the
+  update structure, and it pays for itself on real pairs.
 - Clutter and misdetection are first-class rather than post-hoc thresholds, which
   matters when occlusion makes 30% of keypoints unmatchable.
 
@@ -910,15 +978,20 @@ with Sinkhorn in the zero-entropy limit, so the interesting question is whether 
 max-sum version is competitive with fewer parameters.
 
 **Temporal association.** The same machinery for frame-to-frame matching, for
-ego-motion. Two things that failed for stereo should pay there: the search is
-two-dimensional so ordering does not come free from a disparity range, and $$k$$ is
-genuinely large so a motion prior from IMU-derived rotation compensation has
-something to prune.
+ego-motion. The search is two-dimensional there, so nothing constrains ordering for
+free and $$k$$ is genuinely large, which gives a motion prior from IMU-derived rotation
+compensation something to prune.
 
-A caveat on all of the above. Two synthetic textures and two real pairs is not a
-benchmark, and 450×375 images are small by current standards. What I would expect to
+A caveat on all of the above. Three synthetic textures and eight real scenes is not a
+benchmark, and images around 450×375 are small by current standards. What I would expect to
 hold generally is the shape of the results: the gain over a ratio test tracks
 ambiguity, loopy max-sum lands on the LAP optimum, precision collapses under
-degeneracy for every method including the exact one, ordering is redundant once
-disparity is bounded, and on real images the detector binds before the matcher does.
-The specific figures are what this code did on these seven scenes.
+degeneracy for every method including the exact one, and on real images the detector
+binds before the matcher does. The specific figures are what this code did on these
+scenes.
+
+The ordering result is the one I would trust least and the one I would most want
+someone to repeat. It is about a 1% effect, significant at $$p = 0.042$$ on eight
+scenes, and it points the opposite way from what my synthetic scenes said. That is
+enough to switch the factor on, since it is nearly free, and not enough to call it
+settled.
