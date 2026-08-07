@@ -2,7 +2,7 @@
 layout: post
 title: 'MASDA for Sparse Stereo Matching'
 subtitle: What the uniqueness constraint is worth, measured against ground truth
-thumbnail-img: https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/associations_periodic.png
+thumbnail-img: https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/thumb_teddy.png
 date: '2026-08-07 19:00:00 +0200'
 categories: association
 comments: false
