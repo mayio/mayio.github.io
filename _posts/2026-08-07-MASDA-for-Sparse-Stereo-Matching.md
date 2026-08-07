@@ -69,7 +69,7 @@ keypoint is matchable is wrong a third of the time.
 
 What stereo adds is geometry. The pair is rectified, so correspondences lie on the
 same image row and disparity $$d = x_L - x_R$$ is positive and bounded. That makes the
-association graph very sparse, which turns out to matter a lot (§6).
+association graph very sparse, which turns out to matter a lot ([section 6](#6-speed-the-representation-decides-it)).
 
 ### 1.1 Factor graph
 
@@ -225,18 +225,25 @@ move with the viewpoint, surfaces that are not Lambertian.
 So the same matcher also runs on **Teddy** and **Cones** from the Middlebury 2003
 stereo set. These are the pairs the stereo literature has been comparing on for
 twenty years, they are rectified, and they ship structured-light ground truth at
-quarter-pixel resolution with about 2-3% of pixels marked unknown. Middlebury
-states plainly: "We grant permission to use and publish all images and disparity
-maps on this website."
+quarter-pixel resolution with about 2-3% of pixels marked unknown. The
+[dataset page](https://vision.middlebury.edu/stereo/data/) states: "We grant
+permission to use and publish all images and disparity maps on this website."
 
 > D. Scharstein and R. Szeliski (2003). *High-accuracy stereo depth maps using
 > structured light.* CVPR, 195-202.
 > [doi:10.1109/CVPR.2003.1211354](https://doi.org/10.1109/CVPR.2003.1211354)
 
-§7 needs more than two scenes, so it also uses the six Middlebury 2005 scenes: Art,
-Books, Dolls, Laundry, Moebius and Reindeer, at third size. Those ship no documented
-disparity scale in the two-view archive, so the factor of 3 is established rather than
-assumed: for a pixel at $$x$$ in the left view with true disparity $$t$$, the right
+[Section 7](#7-can-masda-express-the-ordering-constraint) needs more than two scenes,
+so it also uses the six Middlebury 2005 scenes: Art, Books, Dolls, Laundry, Moebius
+and Reindeer, at third size. Those come from a different paper and carry their own
+citation:
+
+> D. Scharstein and C. Pal (2007). *Learning conditional random fields for stereo.*
+> CVPR.
+> [doi:10.1109/CVPR.2007.383191](https://doi.org/10.1109/CVPR.2007.383191)
+
+The 2005 two-view archives ship no documented disparity scale, so the factor of 3 is
+established rather than assumed: for a pixel at $$x$$ in the left view with true disparity $$t$$, the right
 view's disparity map at $$x - t$$ must also read $$t$$. That identity holds to a median
 of 0.000 px at a scale of 3 and fails at every other integer, and it involves no
 matcher, so it cannot flatter the results.
@@ -448,7 +455,7 @@ Precision restricted to keypoints that had an attainable answer is **0.876 on Te
 and 0.963 on Cones**, against a raw 0.615 and 0.781. So of Teddy's 132 wrong
 matches, 102 were forced by the detector and 30 were chosen badly.
 
-This reorders the priorities in §10. I had descriptor quality first, on the strength
+This reorders the priorities in [section 10](#10-what-would-improve-the-matcher). I had descriptor quality first, on the strength
 of the synthetic sweep. On real images, detector repeatability comes first: a
 matcher cannot recover a correspondence whose right-image endpoint was never
 proposed. It is also the cheaper fix, since it does not need a learned model, only a
@@ -456,7 +463,7 @@ detector that agrees with itself across two views.
 
 It is worth being clear that this is not a criticism of the numbers above. Raw
 precision is the number a downstream consumer actually experiences, so it is the
-honest headline. The decomposition says where to spend effort next.
+number to report. The decomposition says where to spend effort next.
 
 ### 5.4 Ambiguity predicts precision on both kinds of data
 
@@ -541,7 +548,7 @@ while a naive triangulation will be poisoned.
 So the claim is not that MASDA beats nearest-neighbour. It is that MASDA extracts
 everything the uniqueness constraint contains, which is a lot when descriptors are
 ambiguous and not enough when they are degenerate. That is what motivates adding
-further factors, which is §7.
+further factors, which is [section 7](#7-can-masda-express-the-ordering-constraint).
 
 ### 5.6 Damping
 
@@ -715,8 +722,9 @@ second scene built for ordering, with nine thin bars at assorted depths over
 broadband texture, where errors do cross.
 
 Both scenes are run over five random seeds, and what is reported is the *paired*
-difference against the same scene with the factor off. That is not decoration. The
-first two times I measured this I got opposite answers, and §7.4 explains why.
+difference against the same scene with the factor off. That is not decoration: the
+scene-to-scene spread below is ±31 correct matches against an effect of about 1, and
+single-scene runs of this experiment gave me opposite signs.
 
 **Thin bars**, the scene built to favour ordering. Baseline: 512.0 ± 31.2 correct,
 50.8 ± 11.3 crossings out of roughly 2800 same-band pairs.
@@ -739,12 +747,11 @@ The factor does what the derivation says it should. Crossings fall reliably and
 monotonically in $$\kappa$$: by 18% on thin bars and 47% on the lattice.
 
 Accuracy does not improve. On the scene built to favour ordering the change is one
-match in 512, smaller than its own spread across seeds, so the honest reading is
-"no effect". On repetitive texture it is consistently negative, −6 to −7 in every
-seed.
+match in 512, smaller than its own spread across seeds, which reads as no effect.
+On repetitive texture it is consistently negative, −6 to −7 in every seed.
 
 On this evidence I concluded the factor was not worth switching on. That conclusion
-was wrong, and §7.2 is why.
+was wrong, and [section 7.2](#72-on-real-data-it-does-help-slightly) is why.
 
 ### 7.2 On real data it does help, slightly
 
@@ -770,8 +777,8 @@ That is a small effect with marginal significance on eight scenes, and I would n
 build anything on the $$p$$-value alone. What makes it believable is the consistency:
 it never costs more than one match, and it cuts crossings by a third on every scene.
 
-So the honest summary is the opposite of what the synthetic scenes said. On real
-imagery an ordering factor is worth switching on. It is cheap, it removes a third of
+So the answer is the opposite of what the synthetic scenes said. On real imagery an
+ordering factor is worth switching on. It is cheap, it removes a third of
 the crossings, and it returns about one percent more correct matches.
 
 ### 7.3 Why the two disagree
@@ -828,32 +835,6 @@ enough to leave on, and worth about a percent on real imagery. I would still exp
 it to matter more where the gating is weak: an uncalibrated pair, or two-dimensional
 temporal association, where nothing constrains ordering for free.
 
-### 7.4 A note on measuring small effects
-
-The scene-to-scene spread on thin bars is ±31 correct matches. The ordering effect is
-about 1. I first reported this experiment from a single scene and got "+6, it helps";
-the second time, "−3, it hurts". Neither was a finding. Both were what a ±31
-measurement of a ±2 effect looks like.
-
-There was a second problem underneath. The scene generator seeded itself from
-Python's builtin `hash()`, which is salted per process, so every run drew a different
-scene and no published number could be reproduced. Those two contradictory runs were
-not even measuring the same geometry. It now seeds from `zlib.crc32`, and the numbers
-above come from one script that regenerates every table in this article.
-
-I am leaving this in rather than quietly fixing it, because the failure is not
-exotic. A single-seed experiment on a procedural scene reports a property of that
-scene, and if the effect you are chasing is smaller than the scene-to-scene variance,
-you will get whichever sign you happened to draw. Error bars over seeds cost almost
-nothing here and would have caught it immediately.
-
-The second lesson cost me the conclusion itself. I applied that treatment to the
-synthetic scenes and then reported the real result from two scenes with no spread at
-all, and the two-scene answer was the wrong sign. Generating replicates is cheap when
-a script makes the scene and expensive when a lab did, which is precisely why the
-real side is the one that gets left at n = 2. Middlebury 2005 was six more scenes and
-one afternoon.
-
 ---
 
 ## 8. Comparison with existing work
@@ -900,8 +881,9 @@ ELAS is worth mentioning too: it uses a triangulated set of robustly matched sup
 points as a prior for dense estimation, which is close to the sparse-then-densify
 arrangement a MASDA front end would naturally feed.
 
-> Geiger, A., Roser, M., & Urtasun, R. (2010). *Efficient Large-Scale Stereo
-> Matching.* ACCV.
+> Geiger, A., Roser, M., & Urtasun, R. (2011). *Efficient Large-Scale Stereo
+> Matching.* ACCV 2010, LNCS 6492, 25-38.
+> [doi:10.1007/978-3-642-19315-6_3](https://doi.org/10.1007/978-3-642-19315-6_3)
 
 ---
 
@@ -918,7 +900,7 @@ Where MASDA is the right choice:
   stabilises well before the messages do.
 - It extends, and this is the main reason to prefer it over an exact LAP solver.
   Adding an ordering, smoothness or temporal factor keeps a factor graph a factor
-  graph, whereas it stops being an assignment problem. §7 is the demonstration: a new
+  graph, whereas it stops being an assignment problem. [section 7](#7-can-masda-express-the-ordering-constraint) is the demonstration: a new
   pairwise constraint cost one clamped scalar per conflicting edge, no change to the
   update structure, and it pays for itself on real pairs.
 - Clutter and misdetection are first-class rather than post-hoc thresholds, which
@@ -926,8 +908,11 @@ Where MASDA is the right choice:
 
 Where it is not:
 
-- No convergence guarantee, and the guarantee that exists lapses precisely when the
-  problem is ambiguous, which is when you wanted help.
+- The correctness guarantee is conditional and the condition is not always met.
+  Bayati, Shah and Sharma require the LP relaxation to have a unique optimum;
+  exactly tied scores break that, and repetitive texture is where ties come from.
+  In practice it still reached the optimum on both real pairs and came within 0.7%
+  of it on the lattice, but nothing in the theory promised that.
 - It cannot create information. On degenerate texture it produces confident wrong
   answers where a ratio test produces none, and which of those is preferable is a
   property of the consumer.
@@ -939,7 +924,7 @@ Where it is not:
 ## 10. What would improve the matcher
 
 Ranked by how much I expect them to matter. Real data reordered this list; the
-first item was not on it at all before §5.3.
+first item was not on it at all before [section 5.3](#53-on-real-data-the-detector-is-the-binding-constraint).
 
 **Detector repeatability.** Only about half of the left keypoints on Teddy and Cones
 have a right-image keypoint within a pixel of their true correspondence, and the
@@ -951,7 +936,7 @@ right and let $$\gamma$$ discard the surplus, which is what the misdetection ter
 for. This needs no learned model and no new mathematics, which is why it goes first.
 
 **Better scores.** $$s(i,j)$$, $$\lambda$$ and $$\gamma$$ are the weakest part of this by
-a wide margin. Everything in §5 says the constraint machinery is already extracting
+a wide margin. Everything in [section 5](#5-results-against-ground-truth) says the constraint machinery is already extracting
 what it can, and the shortfall is in the evidence being fed to it. A small model
 over descriptor distance, vertical residual, response ratio and local texture energy,
 trained against ground truth to output a calibrated log-likelihood ratio, would
