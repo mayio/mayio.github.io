@@ -24,9 +24,10 @@ Jonker-Volgenant.
 
 Results, briefly:
 
-- MASDA reaches the exact LAP optimum on all three test problems.
-- Against mutual nearest-neighbour with a ratio test, it finds 2.75× more correct
-  matches on ambiguous texture, and 2-3% more on easy texture.
+- MASDA reaches the exact LAP optimum on all five test problems, three synthetic and
+  two real.
+- Against mutual nearest-neighbour with a ratio test, it finds 3.27× more correct
+  matches on ambiguous texture, and 1-7% more where descriptors discriminate.
 - Precision collapses for every method on ambiguous texture, including the exact
   solver. Uniqueness is real information but it is not sufficient information.
 - Adding an ordering factor is cheap and it works, in that crossings drop. It does
@@ -34,10 +35,16 @@ Results, briefly:
   all of them.
 - The speed advantage depends entirely on representation. A dense implementation is
   slower than scipy's Jonker-Volgenant; the same algorithm on an edge list is
-  208-285× faster.
+  157-230× faster.
+- On real pairs the detector, not the matcher, is the binding constraint: only half
+  the left keypoints have a right-image keypoint anywhere near their true
+  correspondence, which caps recall before matching starts.
 
-Everything runs from one script with no input images, so there is nothing to
-license, and the disparity is known exactly.
+The synthetic half runs from one script with no input images, so the disparity is
+known exactly. The real half uses Middlebury's Teddy and Cones, which ship
+quarter-pixel ground truth and come with explicit permission to publish; they
+download themselves on first run. One command regenerates every table and figure
+below.
 
 ---
 
@@ -154,9 +161,18 @@ constant.
 
 ---
 
-## 2. A scene with known answers
+## 2. Two sources of ground truth
 
-Without a rangefinder, real stereo footage cannot tell you whether a match is
+The matcher is measured on two kinds of data, and they answer different questions.
+A synthetic scene lets me dial texture from discriminative to degenerate and watch
+what that does, which is the experiment the article is built around. Real
+photographs tell me whether any of it survives contact with actual cameras. Neither
+is sufficient alone: the synthetic pair has no radiometric differences between the
+two views, and the real pairs cannot be swept.
+
+### 2.1 A synthetic scene
+
+Without a rangefinder, your own stereo footage cannot tell you whether a match is
 correct. Synthetic data can, so I generate the scene:
 
 ```python
@@ -187,7 +203,7 @@ for x, x2, d in zip(xs[ok], xr[ok], disp[y][ok]):
 
 ![scene](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/scene.png)
 
-### 2.1 Three textures
+#### Three textures
 
 The same geometry is rendered three ways, because texture rather than geometry
 decides how hard the association is:
@@ -197,6 +213,33 @@ decides how hard the association is:
 | broadband | multi-scale noise | descriptors are individually discriminative; the easy case |
 | dots | pseudo-random blobs | imitates an IR projector, as on a RealSense D435 |
 | periodic | regular lattice | repetitive structure: brick, fencing, tiling. The hard case. |
+
+### 2.2 Real pairs with ground truth
+
+The synthetic right image is a warp of the left one, so every descriptor difference
+comes from resampling and added noise. Two real cameras differ in ways that cannot
+produce: different gain and vignetting, different noise, specular highlights that
+move with the viewpoint, surfaces that are not Lambertian.
+
+So the same matcher also runs on **Teddy** and **Cones** from the Middlebury 2003
+stereo set. These are the pairs the stereo literature has been comparing on for
+twenty years, they are rectified, and they ship structured-light ground truth at
+quarter-pixel resolution with about 2-3% of pixels marked unknown. Middlebury
+states plainly: "We grant permission to use and publish all images and disparity
+maps on this website."
+
+> D. Scharstein and R. Szeliski (2003). *High-accuracy stereo depth maps using
+> structured light.* CVPR, 195-202.
+> [doi:10.1109/CVPR.2003.1211354](https://doi.org/10.1109/CVPR.2003.1211354)
+
+Ground truth on real data needs one more piece of care than on synthetic data.
+Middlebury marks unknown disparity as zero rather than shipping a separate
+visibility mask, so a match landing on an unknown pixel has no correct answer to be
+compared against. Scoring those as wrong would charge the matcher for holes in the
+dataset, so they are counted separately and excluded from precision. On Teddy that
+is 10 matches out of 353.
+
+![real teddy](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/real_teddy.png)
 
 ---
 
@@ -211,13 +254,13 @@ Over roughly 1400-2000 keypoints per image:
 
 | texture | distinct descriptors | median score margin | margin < 0.05 |
 |---|---|---|---|
-| broadband | 94% | 0.833 | 3.4% |
-| dots | 93% | 0.792 | 6.2% |
-| periodic | 74% | 0.083 | 41.2% |
+| broadband | 95% | 0.750 | 4.7% |
+| dots | 93% | 0.750 | 5.1% |
+| periodic | 74% | 0.083 | 38.7% |
 
 The score margin is best candidate minus runner-up, per left keypoint. It is what
 decides difficulty, and it is what a ratio test keys on. On the lattice the median
-margin is ten times smaller and 41% of keypoints have effectively tied candidates.
+margin is nine times smaller and 39% of keypoints have effectively tied candidates.
 
 The distinct-descriptor count is misleading. The dot texture has 93% distinct
 descriptors, almost the same as broadband, yet this is supposed to be the ambiguous
@@ -316,60 +359,166 @@ attainable matches only: a left keypoint counts in the denominator only if its t
 correspondence is unoccluded *and* was itself detected in the right image. Counting
 the rest would charge the matcher for the detector's misses.
 
-### broadband
+### 5.1 Synthetic
+
+#### broadband
 
 | method | matches | correct | wrong | precision | recall | objective |
 |---|---|---|---|---|---|---|
-| Mutual-NN + ratio | 774 | 670 | 104 | 0.866 | 0.800 | 464.58 |
-| MASDA | 802 | 681 | 121 | 0.849 | 0.813 | 478.77 |
-| Optimal LAP (JV) | 802 | 680 | 122 | 0.848 | 0.811 | 478.77 |
+| Mutual-NN + ratio | 764 | 650 | 114 | 0.851 | 0.773 | 460.37 |
+| MASDA | 807 | 661 | 146 | 0.819 | 0.786 | 476.67 |
+| Optimal LAP (JV) | 807 | 662 | 145 | 0.820 | 0.787 | 476.67 |
 
-### dots
-
-| method | matches | correct | wrong | precision | recall | objective |
-|---|---|---|---|---|---|---|
-| Mutual-NN + ratio | 840 | 689 | 151 | 0.820 | 0.818 | 492.98 |
-| MASDA | 891 | 707 | 184 | 0.793 | 0.840 | 521.10 |
-| Optimal LAP (JV) | 891 | 708 | 183 | 0.795 | 0.841 | 521.10 |
-
-### periodic
+#### dots
 
 | method | matches | correct | wrong | precision | recall | objective |
 |---|---|---|---|---|---|---|
-| Mutual-NN + ratio | 401 | 84 | 317 | 0.209 | 0.145 | −0.70 |
-| MASDA | 1134 | 231 | 903 | 0.204 | 0.400 | 641.23 |
-| Optimal LAP (JV) | 1134 | 204 | 930 | 0.180 | 0.353 | 647.15 |
+| Mutual-NN + ratio | 854 | 690 | 164 | 0.808 | 0.801 | 491.28 |
+| MASDA | 917 | 700 | 217 | 0.763 | 0.813 | 521.67 |
+| Optimal LAP (JV) | 917 | 700 | 217 | 0.763 | 0.813 | 521.67 |
+
+#### periodic
+
+| method | matches | correct | wrong | precision | recall | objective |
+|---|---|---|---|---|---|---|
+| Mutual-NN + ratio | 426 | 78 | 348 | 0.183 | 0.132 | 17.35 |
+| MASDA | 1152 | 255 | 897 | 0.221 | 0.433 | 652.34 |
+| Optimal LAP (JV) | 1151 | 243 | 908 | 0.211 | 0.413 | 656.68 |
 
 ![associations](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/associations_periodic.png)
 
 ![comparison](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/comparison.png)
 
-### 5.1 Reading the numbers
+### 5.2 Real pairs
+
+Same matcher, same $$\lambda$$ and $$\gamma$$, same 30 iterations. "scorable"
+excludes matches landing on unknown ground truth. A match counts as correct within
+Middlebury's standard 1 px threshold.
+
+#### Teddy
+
+| method | matches | scorable | correct | precision | recall | objective |
+|---|---|---|---|---|---|---|
+| Mutual-NN + ratio | 301 | 291 | 198 | 0.680 | 0.667 | 121.13 |
+| MASDA | 353 | 343 | 211 | 0.615 | 0.710 | 153.62 |
+| Optimal LAP (JV) | 353 | 343 | 209 | 0.609 | 0.704 | 153.62 |
+
+#### Cones
+
+| method | matches | scorable | correct | precision | recall | objective |
+|---|---|---|---|---|---|---|
+| Mutual-NN + ratio | 407 | 396 | 320 | 0.808 | 0.746 | 182.55 |
+| MASDA | 441 | 430 | 336 | 0.781 | 0.783 | 204.98 |
+| Optimal LAP (JV) | 441 | 430 | 334 | 0.777 | 0.779 | 204.98 |
+
+The pattern from the synthetic scene survives: MASDA matches more than the ratio
+test (353 against 301, 441 against 407), gets more of them right (211 against 198,
+336 against 320), and reaches the LAP objective exactly on both scenes. It again
+edges the exact solver on correct matches while tying on the objective, 211 against
+209 and 336 against 334, which is tie-breaking rather than superiority.
+
+Raw precision is much worse than on synthetic data, 0.615 and 0.781 against 0.849.
+Most of that gap is not the matcher's fault, which took some digging to establish.
+
+### 5.3 On real data the detector is the binding constraint
+
+Keypoints are detected independently in the two images, and on real photographs
+Shi-Tomasi does not pick the same points twice. Only **48% of Teddy's left keypoints
+have any right keypoint within 1 px of their true correspondence**, and 51% on
+Cones. For the other half there is no correct answer available at any price, so a
+matcher that assigns them is wrong by construction.
+
+Splitting MASDA's errors accordingly:
+
+| scene | correct | wrong, no correct answer existed | wrong, genuine matcher error |
+|---|---|---|---|
+| Teddy | 211 | 102 | 30 |
+| Cones | 336 | 81 | 13 |
+
+Precision restricted to keypoints that had an attainable answer is **0.876 on Teddy
+and 0.963 on Cones**, against a raw 0.615 and 0.781. So of Teddy's 132 wrong
+matches, 102 were forced by the detector and 30 were chosen badly.
+
+This reorders the priorities in §10. I had descriptor quality first, on the strength
+of the synthetic sweep. On real images, detector repeatability comes first: a
+matcher cannot recover a correspondence whose right-image endpoint was never
+proposed. It is also the cheaper fix, since it does not need a learned model, only a
+detector that agrees with itself across two views.
+
+It is worth being clear that this is not a criticism of the numbers above. Raw
+precision is the number a downstream consumer actually experiences, so it is the
+honest headline. The decomposition says where to spend effort next.
+
+### 5.4 Ambiguity predicts precision on both kinds of data
+
+The synthetic sweep's central claim is that the score margin, best minus second
+best, predicts how well the matcher does. If that is a property of the problem
+rather than of my scene generator, real data should fall on the same curve.
+
+It does. Teddy conveniently supplies a controlled comparison: its back wall is
+partly plain and partly covered in printed newspaper, at the same depth, in the same
+image, under the same lighting.
+
+| region | median margin | precision | matches |
+|---|---|---|---|
+| synthetic periodic | 0.083 | 0.221 | 1152 |
+| Teddy wall, printed | 0.417 | 0.514 | 138 |
+| Teddy, whole scene | 0.542 | 0.615 | 343 |
+| Teddy wall, plain | 0.667 | 0.804 | 46 |
+| Cones, whole scene | 0.667 | 0.781 | 430 |
+| synthetic broadband | 0.750 | 0.819 | 807 |
+| synthetic dots | 0.750 | 0.763 | 917 |
+
+![margin vs precision](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/margin_vs_precision.png)
+
+Precision rises with margin across both data sources, and the real points interleave
+with the synthetic ones rather than sitting apart from them. It is a trend and not a
+law: dots and broadband share a median margin of 0.750 but differ by 5 points of
+precision, and Teddy's plain wall beats both from a lower margin. The median is a
+summary, so two scenes that agree on it can still differ in the tail.
+
+The controlled part of the comparison is Teddy's back wall. 59% of all Teddy's wrong
+matches sit on it, the printed half and the plain half differ in nothing but texture,
+and precision differs by 29 points.
+
+The synthetic lattice was not a strawman, then. It is the same failure that real
+repetitive texture produces, run at higher contrast so it can be measured cleanly.
+Real data does sit slightly below the synthetic trend at equal margin, which is what
+you would expect: two physical cameras add radiometric and specular differences that
+a warp cannot simulate, so a given margin buys a little less on real images.
+
+### 5.5 Reading the numbers
 
 **MASDA reaches the optimum.** Objective ratios against exact Jonker-Volgenant are
-1.0000, 1.0000 and 0.9909. Loopy max-sum, with no guarantee available, lands on the
+1.0000, 1.0000 and 0.9934. Loopy max-sum, with no guarantee available, lands on the
 LAP optimum on all three problems. That is not what "approximate inference on a
 loopy graph" leads you to expect.
 
-On the lattice it also gets *more correct matches* than the exact solver, 231
-against 204, while scoring slightly lower on the objective. The objective is a
-proxy, and maximising it exactly does not maximise correctness.
+On the lattice it also gets *more correct matches* than the exact solver, 255
+against 243, while scoring slightly lower on the objective. The objective is a
+proxy, and maximising it exactly does not maximise correctness. The same thing
+happens on both real pairs, 211 against 209 and 336 against 334.
 
 **The gain over nearest-neighbour tracks ambiguity.** Correct matches:
 
 | texture | median margin | MASDA | Mutual-NN | ratio |
 |---|---|---|---|---|
-| broadband | 0.833 | 681 | 670 | 1.02× |
-| dots | 0.792 | 707 | 689 | 1.03× |
-| periodic | 0.083 | 231 | 84 | 2.75× |
+| broadband | 0.750 | 661 | 650 | 1.02× |
+| dots | 0.750 | 700 | 690 | 1.01× |
+| periodic | 0.083 | 255 | 78 | 3.27× |
+| Teddy (real) | 0.542 | 211 | 198 | 1.07× |
+| Cones (real) | 0.667 | 336 | 320 | 1.05× |
 
-Where descriptors discriminate, uniqueness adds two or three percent and a ratio
-test is a perfectly reasonable matcher. Where they do not, MASDA finds 2.75× more
-correct correspondences. Note mutual-NN's objective on the lattice: −0.70, negative.
-The ratio test rejects so much that it pays more in clutter and misdetection cost
-than it earns in matches. It is not trading badly; it is declining to trade.
+Where descriptors discriminate, uniqueness adds one or two percent and a ratio test
+is a perfectly reasonable matcher. Where they do not, MASDA finds 3.27× more correct
+correspondences. The real pairs sit in between at 5-7%, which fits: real texture is
+neither as clean as broadband noise nor as adversarial as a lattice.
 
-**Precision collapses for everyone.** 0.204 for MASDA, 0.209 for mutual-NN, 0.180
+Look at mutual-NN's objective on the lattice: 17.35, against MASDA's 652.34. The
+ratio test rejects so much that it barely scores at all. It is not trading badly; it
+is declining to trade.
+
+**Precision collapses for everyone.** 0.221 for MASDA, 0.183 for mutual-NN, 0.211
 for the exact optimum.
 
 This is the result I find most useful. Uniqueness is real information and it is
@@ -377,7 +526,7 @@ being used optimally here, since the exact solver does no better. But on genuine
 repetitive texture the information is not in the descriptors, and constraint
 propagation cannot create it. What MASDA does is convert a refusal to answer into
 answers, most of which are wrong. Whether that helps depends on the consumer: a
-bundle adjustment with a robust loss will happily take 231 good matches out of 1134,
+bundle adjustment with a robust loss will happily take 255 good matches out of 1152,
 while a naive triangulation will be poisoned.
 
 So the claim is not that MASDA beats nearest-neighbour. It is that MASDA extracts
@@ -385,7 +534,7 @@ everything the uniqueness constraint contains, which is a lot when descriptors a
 ambiguous and not enough when they are degenerate. That is what motivates adding
 further factors, which is §7.
 
-### 5.2 Damping
+### 5.6 Damping
 
 ![damping](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/damping.png)
 
@@ -412,11 +561,11 @@ $$-\infty$$, MASDA is slower than scipy's compiled Jonker-Volgenant:
 
 | texture | nodes | edges | dense MASDA | JV (scipy) | ratio |
 |---|---|---|---|---|---|
-| broadband | 1382 | 3263 | 2648 ms | 1834 ms | 0.7× |
-| dots | 1601 | 3769 | 3267 ms | 2007 ms | 0.6× |
-| periodic | 2019 | 4507 | 7403 ms | 3388 ms | 0.5× |
+| broadband | 1377 | 3227 | 2633 ms | 1506 ms | 0.6× |
+| dots | 1640 | 3947 | 5727 ms | 2521 ms | 0.4× |
+| periodic | 2019 | 4556 | 9132 ms | 3962 ms | 0.4× |
 
-With $$m \approx n \approx 1400$$ the matrix holds about two million cells and 3263
+With $$m \approx n \approx 1400$$ the matrix holds about two million cells and 3227
 real edges, so roughly 600× of the arithmetic goes into entries that are $$-\infty$$.
 The $$O(T \cdot E)$$ bound assumes an edge list. A dense array gives
 $$O(T \cdot m \cdot n)$$ and vectorisation does not recover the difference.
@@ -469,20 +618,31 @@ representation differs.
 
 | texture | edges | dense | sparse | JV | vs dense | vs JV |
 |---|---|---|---|---|---|---|
-| broadband | 3263 | 2648 ms | 8.8 ms | 1834 ms | 300× | 208× |
-| dots | 3769 | 3267 ms | 9.3 ms | 2007 ms | 351× | 216× |
-| periodic | 4507 | 7403 ms | 11.9 ms | 3388 ms | 624× | 285× |
+| broadband | 3227 | 2633 ms | 8.6 ms | 1506 ms | 308× | 176× |
+| dots | 3947 | 5727 ms | 16.1 ms | 2521 ms | 357× | 157× |
+| periodic | 4556 | 9132 ms | 17.2 ms | 3962 ms | 530× | 230× |
 
-208-285× faster than compiled Jonker-Volgenant, from interpreted NumPy.
+157-230× faster than compiled Jonker-Volgenant, from interpreted NumPy.
 
 Quality is unchanged. Objectives match the dense solver to four decimals in all
-three cases, and correct-match counts differ by at most three out of several
-hundred, where the two orderings break ties differently: 681 against 682, 707
-against 708, and 231 against 228. Both remain at the LAP optimum. The assignments are not bit-identical,
+three cases, and correct-match counts differ by at most one out of several hundred,
+where the two orderings break ties differently: 661 against 661, 700 against 701,
+and 255 against 255. Both remain at the LAP optimum. The assignments are not bit-identical,
 and with tied beliefs they need not be.
 
+On the real pairs the same ranking holds with a smaller margin:
+
+| scene | nodes | edges | dense | sparse | JV | vs JV |
+|---|---|---|---|---|---|---|
+| Teddy | 1264 | 1683 | 495 ms | 5.5 ms | 156 ms | 28× |
+| Cones | 1721 | 1591 | 1054 ms | 5.4 ms | 451 ms | 83× |
+
+28-83× rather than 157-230×, because these problems are roughly half the size and
+Jonker-Volgenant is cubic while the sparse solver is linear in edges. The gap widens
+with problem size, which is the direction real systems move in.
+
 As an independent check, the same algorithm as a C++ edge-list implementation on
-real imagery (848×480 IR pair, about 1075 keypoints, 2882 candidate edges, 20
+my own imagery (848×480 IR pair, about 1075 keypoints, 2882 candidate edges, 20
 iterations) runs in 1.67 ms against a 33.3 ms frame budget at 30 Hz. The keypoint
 detector, at 21 ms, costs more than ten times as much.
 
@@ -491,7 +651,7 @@ detector, at 21 ms, costs more than ten times as much.
 MASDA's cost is linear in the number of *plausible* associations, and in a
 geometrically constrained problem that is a small fraction of $$m \times n$$. Here the
 epipolar band and disparity range cut roughly two million possible pairings down to
-3300 candidates. Only a representation that exploits that sees any benefit.
+3200 candidates. Only a representation that exploits that sees any benefit.
 
 This also reframes the comparison with an exact solver. It is not about accuracy,
 since Jonker-Volgenant is exactly as good and occasionally slightly better. It is
@@ -538,33 +698,51 @@ $$\kappa$$ stays finite. Thin foreground objects genuinely violate ordering, and
 hard constraint would delete them. Damping goes up to 0.6, because these factors add
 loops that the bipartite convergence result does not cover.
 
-### 7.1 It works, and it does not help
+### 7.1 It works, and it does not improve accuracy
 
-The lattice is an unfair test, because repetitive mistakes tend to be
-order-preserving: a region shifted by one period crosses nothing. So I built a scene
-for it instead, with nine thin bars at assorted depths over broadband texture, where
-errors do cross.
+The lattice is an unfair test on its own, because repetitive mistakes tend to be
+order-preserving: a region shifted by one period crosses nothing. So there is a
+second scene built for ordering, with nine thin bars at assorted depths over
+broadband texture, where errors do cross.
 
-| $$\kappa$$ | matches | correct | precision | crossings |
-|---|---|---|---|---|
-| off | 711 | 506 | 0.712 | 67 / 2790 |
-| 0.1 | 712 | 505 | 0.709 | 64 |
-| 0.4 | 712 | 503 | 0.706 | 59 |
-| 0.8 | 711 | 503 | 0.707 | 58 |
+Both scenes are run over five random seeds, and what is reported is the *paired*
+difference against the same scene with the factor off. That is not decoration. The
+first two times I measured this I got opposite answers, and §7.3 explains why.
 
-The factor does what it is supposed to do: crossings fall by 13%, monotonically in
-$$\kappa$$. Correct matches fall by three. On the lattice the effect is much larger in
-the same direction, crossings 229 → 112 at $$\kappa = 0.3$$, and accuracy again drops
-slightly, 226 → 216 correct.
+**Thin bars**, the scene built to favour ordering. Baseline: 512.0 ± 31.2 correct,
+50.8 ± 11.3 crossings out of roughly 2800 same-band pairs.
 
-So the constraint is enforced and the answer gets marginally worse. Both scenes
-agree on that, which is the outcome I did not expect and the one worth explaining.
+| $$\kappa$$ | Δ correct | Δ crossings |
+|---|---|---|
+| 0.1 | +1.6 ± 1.9 | −4.0 ± 3.0 |
+| 0.4 | +1.0 ± 2.1 | −9.0 ± 6.1 |
+| 0.8 | +1.0 ± 2.3 | −9.4 ± 6.0 |
+
+**Periodic.** Baseline: 230.8 ± 18.8 correct, 227.2 ± 4.1 crossings out of ~9800.
+
+| $$\kappa$$ | Δ correct | Δ crossings |
+|---|---|---|
+| 0.1 | −7.2 ± 5.6 | −78.4 ± 14.9 |
+| 0.4 | −6.0 ± 8.1 | −107.0 ± 18.1 |
+| 0.8 | −7.4 ± 7.9 | −108.0 ± 17.1 |
+
+The factor does what the derivation says it should. Crossings fall reliably and
+monotonically in $$\kappa$$: by 18% on thin bars and 47% on the lattice.
+
+Accuracy does not improve. On the scene built to favour ordering the change is one
+match in 512, smaller than its own spread across seeds, so the honest reading is
+"no effect". On repetitive texture it is consistently negative, −6 to −7 in every
+seed.
+
+The real pairs agree, single scene each so no error bars: Teddy 211 → 214 correct
+with crossings 44 → 30, Cones 336 → 335 with crossings 11 → 8. Crossings down,
+accuracy flat.
 
 ### 7.2 Why it does not help
 
-The baseline has 67 crossings out of 2790 same-band pairs, 2.4%. There was very
-little for the constraint to fix, and the crossings it does remove are apparently
-not the wrong matches.
+The thin-bars baseline has 50.8 crossings out of ~2800 same-band pairs, 1.8%. There
+was very little for the constraint to fix, and the crossings it removes are
+apparently not the wrong matches.
 
 That is not a property of the scene. Matches $$(i,j)$$ and $$(i',j')$$ with
 $$x_i < x_{i'}$$ cross iff $$x_j > x_{j'}$$, that is
@@ -589,6 +767,25 @@ worth switching on in a geometrically gated sparse matcher. I would still expect
 to pay where the gating is weak: a wide disparity range, an uncalibrated pair, or
 two-dimensional temporal association, where nothing constrains ordering for free.
 Here it costs accuracy to buy a statistic nobody consumes.
+
+### 7.3 A note on measuring small effects
+
+The scene-to-scene spread on thin bars is ±31 correct matches. The ordering effect is
+about 1. I first reported this experiment from a single scene and got "+6, it helps";
+the second time, "−3, it hurts". Neither was a finding. Both were what a ±31
+measurement of a ±2 effect looks like.
+
+There was a second problem underneath. The scene generator seeded itself from
+Python's builtin `hash()`, which is salted per process, so every run drew a different
+scene and no published number could be reproduced. Those two contradictory runs were
+not even measuring the same geometry. It now seeds from `zlib.crc32`, and the numbers
+above come from one script that regenerates every table in this article.
+
+I am leaving this in rather than quietly fixing it, because the failure is not
+exotic. A single-seed experiment on a procedural scene reports a property of that
+scene, and if the effect you are chasing is smaller than the scene-to-scene variance,
+you will get whichever sign you happened to draw. Error bars over seeds cost almost
+nothing here and would have caught it immediately.
 
 ---
 
@@ -647,7 +844,7 @@ Where MASDA is the right choice:
 
 - Cost is linear in plausible associations rather than in $$m \times n$$. With
   geometric constraints cutting candidates to about 2.3 per keypoint, the sparse
-  form runs 208-285× faster than an exact LAP solver at the same quality.
+  form runs 157-230× faster than an exact LAP solver at the same quality.
 - It is optimal, or indistinguishable from optimal, on these problems without
   needing to be.
 - It is anytime. A handful of iterations gives a usable answer, and the decision
@@ -673,7 +870,17 @@ Where it is not:
 
 ## 10. What would improve the matcher
 
-Ranked by how much I expect them to matter.
+Ranked by how much I expect them to matter. Real data reordered this list; the
+first item was not on it at all before §5.3.
+
+**Detector repeatability.** Only about half of the left keypoints on Teddy and Cones
+have a right-image keypoint within a pixel of their true correspondence, and the
+matcher cannot recover a correspondence that was never proposed to it. That single
+number bounds recall below 51% before matching starts, and it accounts for 102 of
+Teddy's 132 errors. Concretely: detect in one image and *track* into the other
+rather than detecting twice, or lower the detector threshold to over-propose on the
+right and let $$\gamma$$ discard the surplus, which is what the misdetection term is
+for. This needs no learned model and no new mathematics, which is why it goes first.
 
 **Better scores.** $$s(i,j)$$, $$\lambda$$ and $$\gamma$$ are the weakest part of this by
 a wide margin. Everything in §5 says the constraint machinery is already extracting
@@ -708,8 +915,10 @@ two-dimensional so ordering does not come free from a disparity range, and $$k$$
 genuinely large so a motion prior from IMU-derived rotation compensation has
 something to prune.
 
-A caveat on all of the above. These numbers come from one synthetic scene. I expect
-the qualitative pattern to hold generally: the gain over a ratio test tracks
+A caveat on all of the above. Two synthetic textures and two real pairs is not a
+benchmark, and 450×375 images are small by current standards. What I would expect to
+hold generally is the shape of the results: the gain over a ratio test tracks
 ambiguity, loopy max-sum lands on the LAP optimum, precision collapses under
-degeneracy for every method, and ordering is redundant once disparity is bounded. The
-specific figures are not a benchmark.
+degeneracy for every method including the exact one, ordering is redundant once
+disparity is bounded, and on real images the detector binds before the matcher does.
+The specific figures are what this code did on these seven scenes.
