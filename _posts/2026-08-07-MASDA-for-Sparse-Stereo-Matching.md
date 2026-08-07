@@ -425,6 +425,22 @@ Middlebury's standard 1 px threshold.
 | MASDA | 441 | 430 | 336 | 0.781 | 0.783 | 204.98 |
 | Optimal LAP (JV) | 441 | 430 | 334 | 0.777 | 0.779 | 204.98 |
 
+![real cones](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/real_cones.png)
+
+Cones is the easier of the two and the figure shows why. Its estimated-against-true
+scatter sits on the diagonal, where Teddy's has a vertical smear at a true disparity
+of about 15 px: that smear is the printed newspaper on Teddy's back wall, and Cones
+has no equivalent. Median score margin is 0.667 against Teddy's 0.542.
+
+The wooden trellis in the top right deserves a note, because it looks like it ought
+to be a repetitive-texture failure and it is not. Precision there is 0.760 against
+0.783 over the rest of the scene, and its median margin is *higher*, 0.708 against
+0.667. It holds 10% of the keypoints and produces 6% of the errors. Coarse repetition
+is not the same thing as ambiguity: the slats differ enough from one another inside a
+7×7 window that Census still separates them, and they sit at nearly constant depth so
+the disparity gate is tight. Teddy's newspaper defeats the descriptor at the scale the
+descriptor actually looks at, which is the distinction that matters.
+
 The pattern from the synthetic scene survives: MASDA matches more than the ratio
 test (353 against 301, 441 against 407), gets more of them right (211 against 198,
 336 against 320), and reaches the LAP objective exactly on both scenes. It again
