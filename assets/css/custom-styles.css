@@ -1,0 +1,43 @@
+/* Site-specific rules, loaded after the theme's own stylesheet.
+   Keeping them here rather than in beautifuljekyll.css so that pulling
+   upstream changes into the fork stays a clean merge. */
+
+/* The "part N of five" block that _includes/series-nav.html renders under
+   every post belonging to a series. It sits between the post body and the
+   tags, so it needs to read as navigation rather than as more prose. */
+.series-nav {
+  font-family: var(--header-font);
+  font-size: 0.9375rem;
+  margin: 2.5rem 0 1.875rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--link-col);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.series-nav p {
+  margin-bottom: 0.4rem;
+}
+
+.series-nav p:last-child {
+  margin-bottom: 0;
+}
+
+/* The ordered list of posts on the series hub page. */
+.series-list {
+  padding-left: 1.25rem;
+}
+
+.series-list li {
+  margin-bottom: 1.75rem;
+}
+
+.series-list h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.series-list .series-date {
+  font-size: 0.875rem;
+  opacity: 0.7;
+  margin-bottom: 0;
+}
