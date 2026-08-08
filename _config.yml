@@ -30,9 +30,7 @@ description: "Engineering notes on probabilistic inference and computer vision: 
 
 navbar-links:
   About Me: "aboutme"
-  # Resources:
-  #   - Beautiful Jekyll: "https://beautifuljekyll.com"
-  #   - Learn markdown: "https://www.markdowntutorial.com/"
+  Topics: "/tags/"
   Author's home: "https://www.injournal.de"
 
 ################
@@ -113,8 +111,10 @@ share-links-active:
 # Remove this if you don't want a link in the footer
 url-pretty: "mayio.github.io"
 
-# Add the website title to the title of every page
-title-on-all-pages: true
+# Add the website title to the title of every page. Off: it appends 44 chars of
+# branding to every <title>, which pushes the keywords past where Google
+# truncates the SERP line.
+title-on-all-pages: false
 
 # Excerpt word length - Truncate the excerpt of each post on the feed page to the specified number of words
 excerpt_length: 50
@@ -271,7 +271,7 @@ date_format: "%B %-d, %Y"
 #################################################################################
 
 # Output options (more information on Jekyll's site)
-timezone: "America/Toronto"
+timezone: "Europe/Berlin"
 markdown: kramdown
 highlighter: rouge
 permalink: /:year-:month-:day-:title/
