@@ -252,27 +252,40 @@ It also buys something rarely available in GPU ports: the accuracy story needs
 no new evidence. The GPU produces the same bytes; Part 2's comparison against
 SGM *is* the GPU's comparison against SGM.
 
-## 8. What the GPU taught me about the CPU implementation
+## 8. What the GPU taught me about the CPU implementation — tested, and mostly no
 
-Three of the findings transfer straight back to the CPU-only matcher, and they
-are worth recording even though the GPU path has made them less urgent:
+I first drafted this section as three promising transfers. Then I built and
+measured them the same night, and the honest version is better than the
+promising one:
 
-1. **The insert pass can fuse into the filter's last pass, and the plane store
-   dies with it.** On the CPU, the vertical backward pass writes the filtered
-   plane and a separate insert pass re-reads it to update the top-2. That is the
-   same store-with-one-reader the GPU deleted; fused, the CPU saves a full plane
-   write *and* read per disparity — against a measured 67 ms of insert CPU time
-   at 848×480. (An earlier CPU experiment rejected fusing the insert *between*
-   whole passes; fusing it *into the last pass's loop* is a different cut, and
-   the GPU result says it is the right one.)
-2. **Pin the worker threads.** The 37% run-to-run variance that forced
-   interleaved best-of-N timing is substantially the Denver cores. The solve
-   pinned to A57s went from 30–45 ms of wander to ±0.25 ms. The CPU-only matcher
-   almost certainly gains the same stability, and possibly its mean.
-3. **Score fusion works on any machine.** Computing the score inside the first
-   filter pass, row by row, keeps the working set at row scale instead of plane
-   scale — which matters on the CPU precisely at 848×480, where Part 2 measured
-   that per-thread planes stop fitting the shared L2.
+1. **Fuse the top-2 insert into the filter's last pass, delete the plane store**
+   — the GPU's biggest single win, mapped back. Built, bit-identical, and **a
+   wash**: filter+insert 337 ms thread-summed unfused against 329 fused, wall
+   time equal to slightly worse. The mechanism is the point: on the GPU the
+   deleted stores were DRAM traffic; on the CPU **the plane sits in L2 between
+   passes** (814 KB against 2 MB), so the store the fusion deletes was nearly
+   free and the re-read was nearly a cache hit. A first version was 18% worse
+   outright, because putting the branchy insert inside the recurrence loop
+   killed the compiler's autovectorisation — a trap worth its own sentence:
+   on a CPU, fuse loops only if the hot loop stays branch-free.
+2. **Pin the worker threads to the A57 cluster** — it transformed the GPU
+   tool's solve, so surely the CPU tool too. Measured: **40% worse on the
+   mean, ten times tighter on the spread.** The two Denver cores are both the
+   variance *and* real throughput; the CPU-only matcher needs them, while the
+   GPU tool's four solve threads are better off leaving them to the CUDA
+   driver. Reverted, recorded.
+3. **Score fused into the first filter pass** — not built, and I will say why
+   rather than imply it is pending: it shares the exact mechanism of #1 (the
+   score plane is L2-resident when the horizontal pass reads it), so the same
+   null result is predicted. That is an inference, not a measurement, and it
+   is labeled as one.
+
+So the transferable lesson is not a technique. It is the series' thesis
+completing itself: the desktop was not a proxy for the TX2, the TX2's CPU is
+not a proxy for its own GPU, and **an optimisation is a measurement attached to
+a memory system, not a portable fact.** What does transfer is the method —
+bit-identity as referee, all eight scenes always, and the willingness to revert
+what the numbers refuse.
 
 ## 9. Where this leaves the project
 
