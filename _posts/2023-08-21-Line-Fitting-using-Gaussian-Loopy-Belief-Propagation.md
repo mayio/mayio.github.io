@@ -7,6 +7,7 @@ date: '2023-08-21 12:00:00 +0200'
 comments: false
 mathjax: true
 author: Mario Lüder
+tags: [belief-propagation, probabilistic-inference, factor-graphs, python]
 ---
 
 Gaussian Belief Propagation is a variant of Belief Propagation and used for inference on graphical models if the underlying distribution is described as a Gaussian.

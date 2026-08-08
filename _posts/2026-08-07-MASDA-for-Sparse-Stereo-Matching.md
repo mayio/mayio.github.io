@@ -8,6 +8,7 @@ categories: association
 comments: false
 mathjax: true
 author: Mario Lüder
+tags: [belief-propagation, data-association, computer-vision]
 ---
 
 In [Faster Data Association with Max-Sum Loopy Belief Propagation

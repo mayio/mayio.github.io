@@ -8,6 +8,7 @@ categories: association
 comments: false
 mathjax: true
 author: Mario Lüder
+tags: [belief-propagation, data-association, autonomous-driving, algorithms]
 ---
 
 This presents a data association algorithm I call MASDA (Max-Sum Algorithm Data Association) which relies on message passing in a factor graph. 

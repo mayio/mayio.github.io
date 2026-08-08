@@ -8,6 +8,7 @@ categories: pathplanning
 comments: false
 mathjax: true
 author: Mario Lüder
+tags: [autonomous-driving, algorithms, python]
 ---
 
 

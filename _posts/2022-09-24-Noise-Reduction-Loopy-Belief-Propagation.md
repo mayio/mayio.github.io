@@ -9,6 +9,7 @@ categories: graph
 comments: false
 mathjax: true
 author: Mario Lüder
+tags: [belief-propagation, probabilistic-inference, computer-vision, python]
 ---
 
 I want to continue my previous [post](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation) with a (useful) example to get more a feel how to use Loopy Belief Propagation in practice. 

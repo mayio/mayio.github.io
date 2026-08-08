@@ -8,6 +8,7 @@ categories: graph
 comments: false
 mathjax: true
 author: Mario Lüder
+tags: [belief-propagation, probabilistic-inference, factor-graphs, python]
 ---
 
 This is about how to implement Loopy Belief Propagation in Python and to understand the calculations in detail.
