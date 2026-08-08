@@ -3,7 +3,7 @@ layout: post
 title: 'Real-Time Dense Stereo at 34 Hz on a Jetson TX2 (MASDA, Part 3)'
 subtitle: 'The GPU takes the image plane, the CPU keeps the graph: architecture, dataflow, and why the memory layout the CPU rejected three times is exactly what the GPU wants.'
 thumbnail-img: /assets/img/2026-08-09-Realtime-Dense-MASDA_files/progression.png
-date: '2026-08-09 12:00:00 +0200'
+date: '2026-08-09 01:00:00 +0200'
 categories: association
 comments: false
 mathjax: true
