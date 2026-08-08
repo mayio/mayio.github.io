@@ -1,7 +1,7 @@
 ---
 layout: post
-title: 'Path Planning with Quintic Functions in Frenét Coordinate System'
-subtitle: Introduction, Derivation and Code
+title: 'Path Planning with Quintic Polynomials in Frenet Coordinates'
+subtitle: 'How to generate jerk-minimising trajectories for a vehicle in a Frenet frame: the quintic polynomial derived, with the Python that produces the paths.'
 thumbnail-img: /assets/img/2022-02-13-PathPlanning_files/FrenetFig2.png
 date: '2022-02-13 11:02:00 +0200'
 categories: pathplanning

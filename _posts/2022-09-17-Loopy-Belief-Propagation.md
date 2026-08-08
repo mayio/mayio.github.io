@@ -1,7 +1,7 @@
 ---
 layout: post
-title: 'Loopy Belief Propagation'
-subtitle: Theory with Python implementation
+title: 'Loopy Belief Propagation on Factor Graphs, in Python'
+subtitle: 'Message passing on a factor graph, worked through message by message and then in Python, including how the products of the distributions are computed.'
 date: '2022-09-17 11:02:00 +0200'
 excerpt_separator: <!--more-->
 categories: graph

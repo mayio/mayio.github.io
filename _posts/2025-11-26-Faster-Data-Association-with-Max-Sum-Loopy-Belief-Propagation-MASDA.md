@@ -1,7 +1,7 @@
 ---
 layout: post
-title: 'Faster Data Association with Max-Sum Loopy Belief Propagation (MASDA)'
-subtitle: Data Association with Misdetection and Clutter
+title: 'Faster Data Association with Max-Sum Belief Propagation (MASDA)'
+subtitle: 'A max-sum message passing algorithm for associating measurements with objects under clutter and misdetection, derived from the binary variable model.'
 thumbnail-img: /assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png
 date: '2025-11-26 18:50:00 +0200'
 categories: association

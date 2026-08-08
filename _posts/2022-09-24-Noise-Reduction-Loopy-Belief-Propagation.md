@@ -1,7 +1,7 @@
 ---
 layout: post
-title: 'Simple Noise Reduction with Loopy Belief Propagation'
-subtitle: Practical Example
+title: 'Image Denoising with Loopy Belief Propagation in Python'
+subtitle: 'A Markov random field over image pixels, with the messages run to convergence in Python — the first example here where the graph really has loops.'
 thumbnail-img: /assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_23_0.png
 date: '2022-09-24 00:00:00 +0200'
 excerpt_separator: <!--more-->

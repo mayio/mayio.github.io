@@ -1,7 +1,7 @@
 ---
 layout: page
 title: About me
-subtitle: A small introduction
+subtitle: 'Software engineer in Hamburg, working on object tracking from lidar point clouds and on probabilistic inference on factor graphs.'
 ---
 
 Hello there! 

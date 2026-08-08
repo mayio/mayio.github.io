@@ -1,7 +1,7 @@
 ---
 layout: post
-title: Line Fitting using Gaussian Loopy Belief Propagation
-subtitle: Algorithm and Python implementation
+title: 'Line Fitting with Gaussian Belief Propagation in Python'
+subtitle: 'What changes when the variables are continuous and the distributions Gaussian, worked through on a piecewise line fit in Python.'
 thumbnail-img: /assets/img/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_files/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation_28_1.png
 date: '2023-08-21 12:00:00 +0200'
 comments: false

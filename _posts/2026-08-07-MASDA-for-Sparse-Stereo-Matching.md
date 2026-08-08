@@ -1,7 +1,7 @@
 ---
 layout: post
-title: 'MASDA for Sparse Stereo Matching'
-subtitle: What the uniqueness constraint is worth, measured against ground truth
+title: 'Sparse Stereo Matching with Max-Sum Belief Propagation (MASDA)'
+subtitle: 'What the one-to-one uniqueness constraint buys a sparse stereo matcher, measured against ground truth and against exact linear assignment.'
 thumbnail-img: /assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/thumb_teddy.png
 date: '2026-08-07 19:00:00 +0200'
 categories: association
