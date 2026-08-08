@@ -438,33 +438,44 @@ Everything above is tables. This is the output they describe.
 
 ![depth maps](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/depth_maps.png)
 
-Left is ground truth. Middle is MASDA's disparity: the matched keypoints,
-triangulated and interpolated into a surface. Right is the error, evaluated **at
-the matches only** rather than on the interpolated surface, so it measures the
-matcher and not the rendering.
+Left is the dense ground truth. Middle is every match MASDA returned, plotted at
+its keypoint and coloured by the disparity it estimated, **on the same colour
+scale** — so a dot whose colour matches the ground truth beneath it is a correct
+match, and the comparison needs no further processing. Right is the error.
 
-The middle panel invents everything between matches. Three hundred and fifty three
-points cannot be shown as a picture any other way -- as dots on black they convey
-nothing about whether the geometry is right -- but nothing between two matches was
-measured, and the triangle edges visible in the surface are an artefact of the
-rendering, not structure in the scene.
+Read the middle panel against the left one and the structure is there. Teddy's back
+wall comes out dark, its floor bright, and the step between them lands where the
+ground truth puts it. On Cones the individual cones separate: near ones yellow,
+the far lattice dark, the ordering along each cone preserved. **Depth
+discontinuities are sharp**, because every match is a measurement at one pixel and
+nothing smooths across the boundary.
 
-What it shows is the honest scope of sparse stereo. The coarse geometry is right:
-Teddy's back wall is far and its floor near, Cones' foreground cones stand out from
-the background, and both gradients match the ground truth beside them. The object
-shapes are not resolved. There is no teddy bear in the middle panel, and no cones
-in the lower one, because a few hundred points spread over 407k pixels cannot carry
-a silhouette.
+What the matcher does not give you is a value everywhere. 353 points over 407k
+pixels is one per 1150, and no arrangement of them is a depth image.
 
-That is not a shortfall to tune away, it is what the method is. These points exist
-to feed odometry, calibration and structure, where a few hundred well-localised
-sub-pixel correspondences are worth more than a dense map. If a depth image is the
-product, dense stereo is the right tool and
-[section 8](#8-comparison-with-existing-work) says so.
+#### Why not just interpolate them into a surface?
 
-The error panels also make the failure mode visible. Teddy's red cluster sits in the
-upper right, on the printed newspaper, exactly where the margin analysis said
-precision falls to 0.514. Cones has no such cluster; its errors are scattered.
+My first version of this figure did exactly that, triangulating the matches and
+interpolating. It is worth saying why it was wrong, because it is the obvious thing
+to try.
+
+**Interpolation destroys the one thing the sparse result gets right.** A Delaunay
+triangle spans straight across an occlusion boundary, so a depth step becomes a
+ramp: the edges visible in the middle panel above are smeared away by the very
+operation meant to make the result readable. The rendered surface also looked far
+worse than the numbers deserve, because interpolating a point set with precision
+0.615 puts a wrong value between every pair of wrong matches, and filtering by
+margin barely helps — at margin ≥ 0.6 precision reaches only 0.69 and the surface
+is still distorted.
+
+So a triangulated surface misrepresents this method in both directions at once: it
+hides the sharp edges that are real and invents smooth error that is not.
+
+The right way to get dense depth *from* sparse support points is not to interpolate
+them but to use them as a prior for a per-pixel estimate that can still follow image
+edges, which is exactly what ELAS does and why it appears in
+[section 8](#8-comparison-with-existing-work). That is a different algorithm, not a
+rendering choice.
 
 ### Back to the tables
 
