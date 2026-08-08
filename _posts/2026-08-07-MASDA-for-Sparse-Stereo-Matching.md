@@ -432,6 +432,42 @@ scatter sits on the diagonal, where Teddy's has a vertical smear at a true dispa
 of about 15 px: that smear is the printed newspaper on Teddy's back wall, and Cones
 has no equivalent. Median score margin is 0.667 against Teddy's 0.542.
 
+### What the matcher actually produces
+
+Everything above is tables. This is the output they describe.
+
+![depth maps](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/depth_maps.png)
+
+Left is ground truth. Middle is MASDA's disparity: the matched keypoints,
+triangulated and interpolated into a surface. Right is the error, evaluated **at
+the matches only** rather than on the interpolated surface, so it measures the
+matcher and not the rendering.
+
+The middle panel invents everything between matches. Three hundred and fifty three
+points cannot be shown as a picture any other way -- as dots on black they convey
+nothing about whether the geometry is right -- but nothing between two matches was
+measured, and the triangle edges visible in the surface are an artefact of the
+rendering, not structure in the scene.
+
+What it shows is the honest scope of sparse stereo. The coarse geometry is right:
+Teddy's back wall is far and its floor near, Cones' foreground cones stand out from
+the background, and both gradients match the ground truth beside them. The object
+shapes are not resolved. There is no teddy bear in the middle panel, and no cones
+in the lower one, because a few hundred points spread over 407k pixels cannot carry
+a silhouette.
+
+That is not a shortfall to tune away, it is what the method is. These points exist
+to feed odometry, calibration and structure, where a few hundred well-localised
+sub-pixel correspondences are worth more than a dense map. If a depth image is the
+product, dense stereo is the right tool and
+[section 8](#8-comparison-with-existing-work) says so.
+
+The error panels also make the failure mode visible. Teddy's red cluster sits in the
+upper right, on the printed newspaper, exactly where the margin analysis said
+precision falls to 0.514. Cones has no such cluster; its errors are scattered.
+
+### Back to the tables
+
 The wooden trellis in the top right deserves a note, because it looks like it ought
 to be a repetitive-texture failure and it is not. Precision there is 0.760 against
 0.783 over the rest of the scene, and its median margin is *higher*, 0.708 against
