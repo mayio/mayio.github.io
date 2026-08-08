@@ -37,6 +37,9 @@ Results, briefly:
 - The speed advantage depends entirely on representation. A dense implementation is
   slower than scipy's Jonker-Volgenant; the same algorithm on an edge list is
   157-230× faster.
+- Given a candidate set that contains the answer, and its own confidence measure to
+  filter on, it reaches the precision of semi-global matching — 0.882 against SGM's
+  0.858. The limit was never the inference; it was what the candidates offered.
 - On real pairs the detector, not the matcher, is the binding constraint: only half
   the left keypoints have a right-image keypoint anywhere near their true
   correspondence, which caps recall before matching starts.
@@ -210,7 +213,7 @@ decides how hard the association is:
 | texture | what it is | why |
 |---|---|---|
 | broadband | multi-scale noise | descriptors are individually discriminative; the easy case |
-| dots | pseudo-random blobs | imitates an IR projector, as on a RealSense D435 |
+| dots | pseudo-random blobs | imitates a projected IR pattern, as active stereo rigs use |
 | periodic | regular lattice | repetitive structure: brick, fencing, tiling. The hard case. |
 
 ### 2.2 Real pairs with ground truth
@@ -620,7 +623,7 @@ change plateaus instead of decaying. Damping of 0.3-0.5 stabilises it, and solut
 quality is flat across that range, staying within a fraction of a percent of
 optimal.
 
-On real data (a D435 IR pair, 848×480, around 1100 keypoints) the messages never
+On real imagery (850×480, around 1100 keypoints) the messages never
 formally converge at any iteration budget, yet the *decision* is stable to four
 significant figures from 50 iterations and within 0.1% at 20. The oscillation is
 confined to messages that do not change the answer. Message convergence is not the
@@ -718,10 +721,11 @@ On the real pairs the same ranking holds with a smaller margin:
 Jonker-Volgenant is cubic while the sparse solver is linear in edges. The gap widens
 with problem size, which is the direction real systems move in.
 
-As an independent check, the same algorithm as a C++ edge-list implementation on
-my own imagery (848×480 IR pair, about 1075 keypoints, 2882 candidate edges, 20
-iterations) runs in 1.67 ms against a 33.3 ms frame budget at 30 Hz. The keypoint
-detector, at 21 ms, costs more than ten times as much.
+As an independent check, a C++ edge-list implementation of the same algorithm on
+850×480 imagery with about 1075 keypoints and 2882 candidate edges runs in a few
+milliseconds at 20 iterations — and in that pipeline the keypoint *detector* costs
+several times more than the matcher. Where MASDA sits in a budget depends entirely
+on what is around it; it is rarely the expensive part.
 
 ### 6.3 The actual claim
 
@@ -937,6 +941,74 @@ as odometry, calibration or structure, rather than a depth image.
 > Hirschmüller, H. (2008). *Stereo Processing by Semiglobal Matching and Mutual
 > Information.* IEEE TPAMI, 30(2), 328-341.
 > [doi:10.1109/TPAMI.2007.1166](https://doi.org/10.1109/TPAMI.2007.1166)
+
+#### How far behind is it, actually?
+
+Worth measuring rather than conceding. OpenCV's SGM on the same eight Middlebury
+scenes fills 78% of the known-ground-truth pixels with a bad-1.0 error rate of
+10.9%. Scored at MASDA's *own* keypoints — the only like-for-like comparison — SGM
+gets 0.858 against MASDA's 0.616.
+
+![dense vs sparse](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/dense_vs_sparse.png)
+
+That gap is not about max-sum. It is about the **candidate set**. Decomposing every
+wrong match by whether the correct right keypoint was in that keypoint's candidate
+list at all:
+
+| | share of MASDA's matches |
+|---|---|
+| correct | 61.6% |
+| wrong, correct answer **was** a candidate | 8.1% |
+| wrong, correct answer **never offered** | 30.3% |
+
+So perfect inference over these candidates tops out at 0.697. Nearly a third of the
+time the answer is not in the room, because the correct correspondence is not at any
+detected right keypoint — it is between them. Proposing more right keypoints does
+not fix it: sweeping 555 to 2994 per scene leaves the ceiling flat at 0.68-0.70,
+since the extra candidates add distractors as fast as they add answers.
+
+#### Offer every pixel, and use the margin
+
+The candidate set is a design choice, not a property of the method. Let each left
+keypoint match any right *pixel* on its row within the disparity range — 71
+candidates instead of 5 — and keep uniqueness exactly as it is:
+
+| | matches | correct | precision |
+|---|---|---|---|
+| keypoint-to-keypoint | 2916 | 1796 | 0.616 |
+| semi-dense, ungated | 5486 | 3221 | 0.587 |
+| **semi-dense, margin ≥ 0.05** | 2956 | **2255** | **0.763** |
+| semi-dense, margin ≥ 0.10 | 2058 | 1728 | 0.840 |
+| semi-dense, margin ≥ 0.15 | 1465 | 1292 | **0.882** |
+| *dense SGM, at MASDA's keypoints* | *2916* | *2502* | *0.858* |
+
+Ungated it looks worse, 0.587 against 0.616 — and that reading is wrong, because
+the denominators differ. It returns **79% more correct matches**. I made exactly
+this mistake first time through, which is why the count column is there.
+
+Gated on the score margin from §3 it is better on both axes at once: +459 correct
+*and* +0.147 precision at a threshold of 0.05. At 0.10 it reaches 0.840, and at
+0.15, 0.882 — **past SGM**, on fewer points.
+
+The reason is that the margin becomes *more* informative as candidates multiply.
+Winning against 70 rivals is evidence; winning against 4 is barely anything. The
+same confidence measure that was worth a modest amount on the sparse problem
+becomes the main instrument on the dense one.
+
+So the honest position on dense stereo is narrower than "different problem, use the
+other tool". Uniqueness plus Census reaches SGM-level precision when the correct
+answer is actually offered and the confidence measure is used to discard the cases
+the descriptor could not decide. What MASDA does not do is fill the image: SGM still
+returns a value at 78% of pixels and gated MASDA returns a few thousand points. If a
+depth map is the product, that difference is the whole story. If well-localised
+correspondences with a confidence attached are the product, it is not.
+
+Two caveats I would not want glossed. The comparison is not perfectly like-for-like:
+SGM's 0.858 is measured at MASDA's 2916 keypoints, while the gated rows are over
+their own smaller, self-selected sets. And semi-dense costs about ten times the
+sparse solver, since the gate discards most of the candidates it just paid to score.
+Generating fewer and better candidates is the obvious next move and I have not
+tried it.
 
 ELAS is worth mentioning too: it uses a triangulated set of robustly matched support
 points as a prior for dense estimation, which is close to the sparse-then-densify
