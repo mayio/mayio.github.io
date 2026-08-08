@@ -33,10 +33,12 @@ Results, briefly:
   between a dense and an edge-list implementation of identical math. The dense matcher
   repeats the lesson at the next scale: the cost volume the textbook says to build is
   never materialised at all.
-- Runtime went **246 → 37 ms** on the desktop over the course of this work. On the TX2
-  at the camera's real 848×480 resolution it is **~156 ms against a 33 ms budget**, so
-  it is not real-time yet, and this post says so with the numbers rather than rounding
-  in my favour.
+- Runtime went **246 → 29 ms** on the desktop over the course of this work (Teddy,
+  450×375). At the camera's real 848×480 resolution it is **77 ms on the desktop and
+  ~155 ms on the TX2** against a 33 ms real-time budget — not real-time on the target
+  yet, and this post says so with the numbers rather than rounding in my favour. The
+  desktop-versus-TX2 comparison itself turned out to be one of the more instructive
+  results (section 6).
 - Removing the exhaustive disparity sweep — the thing every fast published matcher does
   — was measured to be worth **5.2× of arithmetic** and delivered **1.0× of runtime** on
   the TX2. The reasons are specific and instructive, and they are the meat of section 6.
@@ -125,10 +127,16 @@ coverage for precision exactly as it did for keypoints.
 Eight Middlebury scenes with ground truth (Teddy, Cones, Art, Books, Dolls, Laundry,
 Moebius, Reindeer), pixel-pooled:
 
-| | coverage | bad-1.0 | desktop | TX2 848×480 |
-|---|---|---|---|---|
-| OpenCV SGM | 78.0% | 10.9% | 16 ms | — |
-| **dense MASDA** | 76.0% | **9.7%** | ~45 ms | ~156 ms |
+| | coverage | bad-1.0 | desktop 450×375 | TX2 450×375 | TX2 848×480 |
+|---|---|---|---|---|---|
+| OpenCV SGM | 78.0% | 10.9% | 16 ms | not measured | not measured |
+| **dense MASDA** | 76.0% | **9.7%** | 39 ms | 70 ms | 152 ms |
+
+(Runtimes are best-of-6 on Teddy and on a real D435 IR pair; the TX2 columns are
+interleaved best-of-6 because that board's run-to-run variance is 37%. SGM's 16 ms is
+OpenCV on the desktop; I have not built OpenCV on the TX2, so those cells are honestly
+empty rather than scaled — scaling desktop numbers to the Jetson is how this project
+once got a figure wrong by 3×.)
 
 Ahead on accuracy by 1.2 points, behind on coverage by 2.0, behind on runtime — the
 honest scoreboard. The accuracy is the part I care about here, because SGM is a strong,
@@ -161,7 +169,7 @@ the exact solver, loses precision:
 
 ## 4. The speed work, and the discipline it forced
 
-The desktop journey was 246 → 45 ms across roughly twenty measured changes. I will not
+The desktop journey was 246 → 39 ms across roughly twenty measured changes (29 with the coarse-to-fine mask of section 6). I will not
 walk through all of them; the ones worth a paragraph each are the ones that generalise.
 
 **The volume removal** (section 2): 1.9×, and the largest single step.
@@ -269,25 +277,50 @@ Parity, and the maps above show the agreement. The loss concentrates where you w
 predict: thin structures (Art: 12.7 → 14.9) that vanish at half resolution, so the
 prior never proposes them.
 
-Runtime:
+Runtime, both machines, both resolutions, same binary and flags. The desktop is a
+4-core x86 at best-of-6; the TX2 is six cores at 2.03 GHz, interleaved best-of-6:
 
-| | desktop 450×375 | TX2 848×480, best-of-6 |
-|---|---|---|
-| full sweep | 46 ms | **156 ms** |
-| coarse-to-fine mask | **37 ms** | 168 ms |
+| | desktop | TX2 | TX2 / desktop |
+|---|---|---|---|
+| 450×375, full sweep | 39 ms | 70 ms | 1.8× |
+| 450×375, coarse-to-fine | **29 ms** | 71 ms | 2.5× |
+| 848×480, full sweep | 90 ms | 152 ms | 1.7× |
+| 848×480, coarse-to-fine | **77 ms** | 155 ms | 2.0× |
 
-**A 1.24× win on the desktop and *flat* on the TX2.** The 5.2× of arithmetic is real —
+**A 1.2–1.4× win on the desktop and *flat* on the TX2 — at both resolutions.** The same
+change, measured on two machines, has a different sign. This is the third time this
+project's desktop has predicted the wrong outcome for the target (int16 was neutral
+there and worth 20% on the TX2; centre-symmetric census was worthless there and worth
+10% on the TX2; now the mask, in the opposite direction), and it is why every number in
+this post says which machine it came from.
+
+Where the platforms actually disagree — per stage, at 848×480, representative runs:
+
+| stage | desktop, full | TX2, full | desktop, c2f | TX2, c2f |
+|---|---|---|---|---|
+| census | 5 ms | 10–14 | 5 | 8–12 |
+| cost (score + filter + insert) | 72–90 | 104–110 | 54 | 64 |
+| **solve (MASDA + merge)** | **12** | **33–48** | **11** | **46–50** |
+| coarse level, whole | — | — | 17 | 43 |
+
+The cost stage — the arithmetic — is only ~1.4× apart between the machines. **The solve
+is ~4× apart**, because it is not arithmetic: it is the fused candidate merge streaming
+the per-thread top-2 planes, 19.5 MB per pass at this resolution, and memory streams are
+where the TX2 is weakest relative to a desktop. So the two machines disagree about which
+stage is expensive. The desktop's frame is dominated by the cost stage, which the mask
+shrinks; the TX2's is increasingly dominated by the solve and the fixed coarse level,
+which the mask cannot touch. Same code, different bottleneck, opposite verdict. The 5.2× of arithmetic is real —
 the fine score loop genuinely shrinks by the band fraction — and three costs ate it:
 
 1. **Background planes have full-width rectangles.** A disparity visible both left and
    right of a foreground object gets a bounding box spanning the row, so the fill and
    the filter still touch nearly the whole image for most planes. Arithmetic scales
    with the band; *rectangles* do not.
-2. **The solver does not scale with $$D$$ at all.** Its cost is per-pixel — the fused
-   merge streams the per-thread top-2 planes, 19.5 MB per pass at 848×480 — and at 47 ms
+2. **The solver does not scale with $$D$$ at all.** Its cost is per-pixel, it is ~4×
+   more expensive on the TX2 than on the desktop (the stage table above), and at ~47 ms
    it is now the largest single item on the board. The mask cannot touch it.
-3. **The coarse level is a fixed 43 ms on the TX2**, almost exactly what the mask saves
-   from the fine cost stage.
+3. **The coarse level is a fixed 43 ms on the TX2** (17 on the desktop), almost exactly
+   what the mask saves from the fine cost stage there.
 
 Two sub-experiments inside this construction are worth recording because they are
 *about MASDA*, not about stereo:
@@ -311,12 +344,14 @@ offer the solver matters more than how cleverly you restrict it.
 
 The honest scoreboard for real-time on the TX2, at the camera's 848×480:
 
-| milestone | TX2 total | vs 30 Hz budget |
-|---|---|---|
-| start of this work | ~246 ms scaled | — |
-| measured at target resolution | 200 ms | 6.0× over |
-| Amdahl fixes | **156 ms** | 4.7× over |
-| coarse-to-fine mask | 168 ms | flat |
+| milestone | desktop 848×480 | TX2 848×480 | TX2 vs 30 Hz budget |
+|---|---|---|---|
+| measured at target resolution | — | 200 ms | 6.0× over |
+| Amdahl fixes | 90 ms | **152 ms** | 4.6× over |
+| coarse-to-fine mask | **77 ms** | 155 ms | flat |
+
+(The Amdahl fixes also carried down to the smaller resolution: Teddy on the TX2 went
+from ~89 ms to ~70 over the same changes, none of which were aimed at it.)
 
 Dense MASDA on this CPU is a 6 Hz matcher today, or ~15 Hz at half resolution. The
 solver itself — the part that is MASDA — is 47 of those milliseconds and is bound by
