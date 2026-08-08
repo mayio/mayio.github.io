@@ -49,6 +49,12 @@ The synthetic half runs from one script with no input images, so the disparity i
 known exactly. The real half uses Middlebury's Teddy and Cones, which ship
 quarter-pixel ground truth.
 
+*Update, 2026-08-08: there is now a
+[Part 2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/),
+which scales this matcher from keypoints to every pixel, beats SGM on accuracy over
+eight ground-truth scenes, and gives an honest account of chasing real time on a
+Jetson TX2 — including the optimisations that did not survive measurement.*
+
 ---
 
 ## 1. Stereo as a data association problem

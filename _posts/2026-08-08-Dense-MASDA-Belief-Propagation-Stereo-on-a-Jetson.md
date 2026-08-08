@@ -1,0 +1,362 @@
+---
+layout: post
+title: 'Dense Stereo Matching with Max-Sum Belief Propagation on a Jetson TX2 (MASDA, Part 2)'
+subtitle: 'Scaling the one-to-one matcher from keypoints to every pixel: what changes in the algorithm, what it costs on embedded hardware, and an honest account of removing the cost volume.'
+thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png
+date: '2026-08-08 22:00:00 +0200'
+categories: association
+comments: false
+mathjax: true
+author: Mario Lüder
+tags: [belief-propagation, data-association, computer-vision, embedded]
+---
+
+In [Part 1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/) I
+applied MASDA — max-sum loopy belief propagation for data association — to sparse stereo
+matching and measured what the one-to-one constraint buys against ground truth. It ended
+with a list of things that would improve the matcher. This post is what happened when I
+stopped matching keypoints and made MASDA decide a disparity for *every pixel*, on a
+desktop first and then on the Jetson TX2 it is actually meant for.
+
+The interesting part is not that it works. It is *which parts of MASDA survived contact
+with 407,040 pixels per frame*, which parts had to change shape, and how often a
+confident performance prediction died on contact with the hardware. I kept every
+measurement, including the failures — especially the failures, because half of what
+shipped came from an experiment that first said something I did not expect.
+
+Results, briefly:
+
+- Dense MASDA is **ahead of OpenCV's SGM on accuracy** over eight Middlebury scenes with
+  ground truth: **9.7% bad-1.0 against SGM's 10.9%**, at 76.0% coverage against 78.0%.
+- The same algorithm, the same $$\lambda$$, $$\gamma$$ and message equations as Part 1 —
+  what changed is the *representation*, again. Part 1 found a 157–230× difference
+  between a dense and an edge-list implementation of identical math. The dense matcher
+  repeats the lesson at the next scale: the cost volume the textbook says to build is
+  never materialised at all.
+- Runtime went **246 → 37 ms** on the desktop over the course of this work. On the TX2
+  at the camera's real 848×480 resolution it is **~156 ms against a 33 ms budget**, so
+  it is not real-time yet, and this post says so with the numbers rather than rounding
+  in my favour.
+- Removing the exhaustive disparity sweep — the thing every fast published matcher does
+  — was measured to be worth **5.2× of arithmetic** and delivered **1.0× of runtime** on
+  the TX2. The reasons are specific and instructive, and they are the meat of section 6.
+- Two failed sub-experiments reinforced Part 1's central finding from a new direction:
+  **the candidate set decides the outcome**. Widening it helped even when the widening
+  looked unprincipled; narrowing it helped even when the narrowing looked principled.
+
+Everything here can be regenerated: the matcher is one C++ file, the benchmark is one
+script against Middlebury ground truth, and every timing on the TX2 is an interleaved
+best-of-N because the board's run-to-run variance is 37% and single runs there mean
+nothing.
+
+---
+
+## 1. From keypoints to pixels: what stays, what changes
+
+Part 1's matcher associates $$m$$ left keypoints with $$n$$ right keypoints, at most one
+each way, with clutter $$\lambda$$ and misdetection $$\gamma$$ as the outside options.
+Dense stereo is the same problem with the nouns substituted once more: every left pixel
+$$(y, x)$$ is a measurement, and its candidate "objects" are the disparities
+$$d \in \{d_{\min} \dots d_{\max}\}$$, i.e. the right pixels $$(y, x-d)$$ on the same
+row.
+
+The message equations do not change. The max-sum messages $$\rho$$ (over a left pixel's
+alternatives) and $$\beta$$ (over a right pixel's claimants) keep the closed form from
+Part 1, the damping stays at 0.4, and — this surprised me — **two iterations are
+enough** at this density, against the 60 I used for sparse problems. The graph is so
+regular that information does not have far to travel.
+
+What changes is everything around the equations:
+
+**The unary score is aggregated, not raw.** A single 7×7 Census comparison gives 49
+Hamming levels, and measured against SGM that quantisation — not the missing smoothness
+prior — is where the accuracy goes: SGM stripped of its smoothness term *and* its
+post-filtering still reached 12.7% bad against my unaggregated 28.1%. So the score for
+(pixel, disparity) is Census plus a truncated absolute difference (a graded cost, 10.3%
+→ 9.7% bad-1.0 by itself), aggregated over an edge-aware support region by a recursive
+filter that stops at intensity edges. MASDA then runs on the aggregated scores. In
+factor-graph terms: better unaries beat a cheap pairwise term. I tried the cheap
+smoothness factor in Part 1 and it was worse at every weight; aggregation is where that
+information actually enters.
+
+**The structure is a regular grid, so the edge list disappears again.** On a grid, "max
+over this left pixel's other candidates" is a contiguous run of $$D$$ scores, and "max
+over this right pixel's other claimants" is a strided walk — stride exactly $$D+1$$.
+Part 1 replaced NumPy scatter with an edge list for 157–230×; the dense form replaces
+the edge list with pointer arithmetic. Same math, third representation.
+
+**Rows are independent**, because correspondences live on a rectified row. Every row is
+solved by an independent MASDA instance, which is what makes the whole thing
+embarrassingly parallel — and later, a GPU kernel rather than a rewrite.
+
+## 2. The cost volume is never built
+
+The textbook pipeline materialises a $$W \times H \times D$$ cost volume — 40 MB per
+frame at 450×375, 98 MB at 848×480 — then aggregates it, then reads it back to pick
+winners. I built that first. Then I measured what the solver actually consumes.
+
+**How many candidates per pixel does MASDA need?** I swept $$k$$, the number of
+top-scoring disparities kept per pixel, against the full volume:
+
+| k | 1 | **2** | 3 | 4 | 8 | full D |
+|---|---|---|---|---|---|---|
+| bad-1.0 | worse | **best** | = | = | = | = |
+
+Two. Not approximately two — *exactly* two, and $$k=2$$ was measurably better than
+$$k=8$$, because the extra candidates are noise the solver has to argue with. This is
+Part 1's precision-by-margin table speaking again: the second-best candidate carries
+real information (it defines the margin), the eighth carries none.
+
+With $$k=2$$, the running top-2 per pixel *is* the reduced volume. So the pipeline
+computes one disparity plane at a time — score, filter — and inserts it into a per-pixel
+top-2 list, and the 40 MB array never exists. The insert's common case is a rejection
+that reads one cached plane, so the whole stage is one streaming pass over the scored
+planes. Removing the volume was measured at **1.9× end-to-end**, and it is also what
+freed the accuracy work: the aggregation radius, the graded cost and the margin gate
+were all tuned after this, on a pipeline fast enough to iterate on.
+
+The solver's outputs are unchanged from Part 1: a disparity per pixel where the
+one-to-one assignment says so, and a **margin** — best minus second-best in the same
+message currency — which is the confidence the gate consumes. The margin gate trades
+coverage for precision exactly as it did for keypoints.
+
+## 3. Where it stands against SGM
+
+Eight Middlebury scenes with ground truth (Teddy, Cones, Art, Books, Dolls, Laundry,
+Moebius, Reindeer), pixel-pooled:
+
+| | coverage | bad-1.0 | desktop | TX2 848×480 |
+|---|---|---|---|---|
+| OpenCV SGM | 78.0% | 10.9% | 16 ms | — |
+| **dense MASDA** | 76.0% | **9.7%** | ~45 ms | ~156 ms |
+
+Ahead on accuracy by 1.2 points, behind on coverage by 2.0, behind on runtime — the
+honest scoreboard. The accuracy is the part I care about here, because SGM is a strong,
+heavily-engineered baseline and MASDA reaches past it with a *different mechanism*:
+uniqueness plus confidence instead of path-wise smoothness. SGM has no uniqueness
+constraint at all — it needs a left-right consistency check bolted on afterwards to get
+to 78% coverage, which is two matcher runs. MASDA gets mutual exclusivity in the
+inference itself, in one run, and produces a calibrated margin as a by-product.
+
+The maps, all eight scenes — left image, ground truth, and the two variants this post
+compares (section 6). Black is "no answer": either no ground truth, or the margin gate
+declined to commit. Note how closely the two right columns agree; that agreement is
+measured at parity in the tables below.
+
+![teddy](/assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png)
+![cones](/assets/img/2026-08-08-Dense-MASDA_files/maps_cones.png)
+![Art](/assets/img/2026-08-08-Dense-MASDA_files/maps_Art.png)
+![Books](/assets/img/2026-08-08-Dense-MASDA_files/maps_Books.png)
+![Dolls](/assets/img/2026-08-08-Dense-MASDA_files/maps_Dolls.png)
+![Laundry](/assets/img/2026-08-08-Dense-MASDA_files/maps_Laundry.png)
+![Moebius](/assets/img/2026-08-08-Dense-MASDA_files/maps_Moebius.png)
+![Reindeer](/assets/img/2026-08-08-Dense-MASDA_files/maps_Reindeer.png)
+
+Where the residual error lives — absolute error against ground truth on Teddy, for both
+variants. The error is at depth discontinuities and in the repetitive-texture regions,
+which is exactly where Part 1's ambiguity analysis predicted every matcher, including
+the exact solver, loses precision:
+
+![teddy error](/assets/img/2026-08-08-Dense-MASDA_files/err_teddy.png)
+
+## 4. The speed work, and the discipline it forced
+
+The desktop journey was 246 → 45 ms across roughly twenty measured changes. I will not
+walk through all of them; the ones worth a paragraph each are the ones that generalise.
+
+**The volume removal** (section 2): 1.9×, and the largest single step.
+
+**int16 through the score, filter and top-2.** The score is $$(24 - \text{hamming})/24$$
+in $$[-1, 1]$$, which maps exactly onto Q14 fixed point with headroom. Measured:
+**neutral on the desktop, 20% on the Jetson** — half the lanes, half the bandwidth, and
+NEON is 128-bit against AVX2's 256. This number pair is the whole argument for measuring
+on the target: the desktop said "don't bother", the target said "20%".
+
+**Centre-symmetric census** (24-bit descriptors): worthless on the desktop, 10% on the
+TX2, and it costs 1.2 points of bad-1.0 — a knob with a price tag on each side, recorded
+and left off.
+
+**A NEON kernel with disparity in the vector lanes.** The score loop was the largest
+single item and its scalar popcount looked like the reason. The first attempt vectorised
+eight *pixels'* popcounts and bought nothing: the table lookups next to the popcount
+stayed per-pixel gathers and took over the loop. The literature (ReS2tAC, Ruf et al.)
+puts *disparity* in the lanes instead — then the eight Hamming distances land in one
+register and NEON's `vqtbl4q_u8` turns both lookup tables into vector operations. Built,
+bit-identical to the scalar loop, **1.59× on the score loop — and 0.92× on the stage**,
+because the eight-disparity work quantum costs more scheduler occupancy than the kernel
+saves. It is in the tree behind a flag, off by default. A 1.6× on 30% of a stage is an
+11% ceiling, and I had ranked it first by item size. Ranking by size × achievable ÷
+collateral is the correction.
+
+**The measurement discipline itself earned its keep.** Three rules, each paid for:
+
+1. *The desktop is not a proxy for the TX2*, in either direction (int16, csct above).
+2. *TX2 variance is 37%* at locked clocks and stable temperature — four A57s and two
+   Denvers being scheduled differently run to run. Everything is interleaved best-of-N.
+3. *`cmp` between two multi-threaded runs is not an identity check.* Two identical runs
+   differ in a handful of pixels because the top-2 insert keeps the first of two equal
+   scores and work is handed out dynamically. Bit-identity is checked single-threaded;
+   accuracy is checked with the benchmark. An earlier experiment was part-reverted on
+   identity evidence that this rule retroactively voids.
+
+## 5. Five wrong guesses about occupancy, then the instrument
+
+At 848×480 — the camera's real resolution, 2.4× the pixels of the Middlebury scenes —
+the TX2 measured **200 ms**, and the cost stage's CPU-to-wall ratio said "3.85 of 6
+cores busy". I now know that number was misread, and the misreading cost three built-
+and-reverted "fixes" earlier in this project and two more mechanism guesses this week
+(an L2 working-set story and a load-imbalance story, both measured false).
+
+The instrument that settled it: per-thread *span* (time the thread existed) printed next
+to per-thread *busy* (sum of its in-loop timers). Result: **5.99 of 6 busy while
+alive**. The workers were saturated; the missing time was *outside* the pool — a serial
+prologue (allocation, coefficient computation) and a serial-ish merge pass between the
+cost pool and the solve pool. Amdahl, not scheduling.
+
+Three fixes, measured together at **1.22×** (193 → 158 ms end-to-end, interleaved
+best-of-6):
+
+- **The merge fused into the solve.** The per-pixel 2-of-2n candidate selection was a
+  separate threaded pass writing 8 MB of merged arrays that only the solver read. Done
+  row-by-row inside the solver instead, the candidates land hot in the 28 KB the row
+  solve reads anyway, and the pass, the arrays and their serial zero-fill all vanish.
+- **The filter coefficients become a 512-byte table.** Two `exp()` per pixel, ~700k
+  transcendentals — but the input is the difference of two bytes, which has 256 values.
+- **A dead normalisation removed.** 407k float divisions for a buffer the shipping
+  path never reads.
+
+The general lesson I keep relearning on this project: **when two mechanism guesses fail
+on the same code, stop guessing and add the instrument.** Every timer added this week
+found money somewhere no story had pointed.
+
+## 6. Removing the D-plane sweep: 5.2× of arithmetic, 1.0× of runtime
+
+This is the comparison this post exists for: the full sweep (score all $$D$$ disparity
+planes) against a coarse-to-fine variant that only scores planes where a half-resolution
+prior says the answer might be.
+
+**The idea has a measured ceiling.** Run the matcher at half resolution (a quarter of
+the pixels, half the disparities — an eighth of the work), upsample, and search only
+$$\pm 2$$ around the coarse answer: if the truth is outside that band, no refinement can
+recover it. Measured on ground truth, **81.5% of known pixels keep the truth in-band**,
+against 67.9% correct-over-known delivered by the full sweep — headroom, at 5.2× less
+arithmetic. Every fast published CPU matcher lives on some version of this: ELAS
+narrows the search around triangulated support points, PatchMatch propagates hypotheses
+instead of sweeping, rSGM subsamples the far disparities.
+
+**The first construction failed, and the mechanism matters.** I indexed the fine-level
+planes by *offset from the prior*, so the filter aggregated pixels whose absolute
+disparities differ wherever the prior slopes — which is everywhere, and wildly at every
+depth discontinuity. Aggregation is worth 16 points of bad-1.0 here, and this broke it:
+4 points worse *at every band width up to ±30*, where the band covers the whole range
+and the only remaining difference is the indexing. A quantity that does not move when
+its supposed cause is varied sevenfold is not a tuning problem.
+
+**The second construction keeps the planes absolute** and uses the prior only as a
+*mask*: plane $$d$$ is scored on the rows whose per-row interval wants it, filtered
+over the plane's bounding rectangle (a rectangular variant of the recursive filter),
+and inserted strictly inside the interval — so a wrong prior costs candidates, never
+wrong values.
+
+Accuracy, eight scenes, pixel-pooled:
+
+| | coverage | bad-1.0 | correct-over-known |
+|---|---|---|---|
+| full sweep | 76.0% | 9.5% | 68.8% |
+| **coarse-to-fine mask** | 76.7% | 10.5% | 68.6% |
+
+Parity, and the maps above show the agreement. The loss concentrates where you would
+predict: thin structures (Art: 12.7 → 14.9) that vanish at half resolution, so the
+prior never proposes them.
+
+Runtime:
+
+| | desktop 450×375 | TX2 848×480, best-of-6 |
+|---|---|---|
+| full sweep | 46 ms | **156 ms** |
+| coarse-to-fine mask | **37 ms** | 168 ms |
+
+**A 1.24× win on the desktop and *flat* on the TX2.** The 5.2× of arithmetic is real —
+the fine score loop genuinely shrinks by the band fraction — and three costs ate it:
+
+1. **Background planes have full-width rectangles.** A disparity visible both left and
+   right of a foreground object gets a bounding box spanning the row, so the fill and
+   the filter still touch nearly the whole image for most planes. Arithmetic scales
+   with the band; *rectangles* do not.
+2. **The solver does not scale with $$D$$ at all.** Its cost is per-pixel — the fused
+   merge streams the per-thread top-2 planes, 19.5 MB per pass at 848×480 — and at 47 ms
+   it is now the largest single item on the board. The mask cannot touch it.
+3. **The coarse level is a fixed 43 ms on the TX2**, almost exactly what the mask saves
+   from the fine cost stage.
+
+Two sub-experiments inside this construction are worth recording because they are
+*about MASDA*, not about stereo:
+
+- **A second search band around the coarse level's runner-up candidate** — MASDA
+  exports its second-best per pixel, and at thin structures the runner-up is often the
+  missing surface. Measured: *worse everywhere* (pooled 10.6 → 11.2). Where the coarse
+  level is ambiguous, its runner-up is the wrong period of a repetitive texture, and a
+  band around it hands the fine solver a wrong surface it can aggregate into a
+  confident answer.
+- **A strict per-pixel band-membership test at insert time** — the "principled" version
+  of the mask. Measured: *a full point worse* (10.6 → 11.6). The row-interval slack
+  admits candidates a pixel's own band would exclude, and they help.
+
+Part 1 concluded that the candidate set, not the inference, decides the outcome — a
+perfect re-ranking of the sparse candidates topped out at 0.697 precision because the
+right answer was often simply absent. Both arrows here point the same way: what you
+offer the solver matters more than how cleverly you restrict it.
+
+## 7. Where this leaves it
+
+The honest scoreboard for real-time on the TX2, at the camera's 848×480:
+
+| milestone | TX2 total | vs 30 Hz budget |
+|---|---|---|
+| start of this work | ~246 ms scaled | — |
+| measured at target resolution | 200 ms | 6.0× over |
+| Amdahl fixes | **156 ms** | 4.7× over |
+| coarse-to-fine mask | 168 ms | flat |
+
+Dense MASDA on this CPU is a 6 Hz matcher today, or ~15 Hz at half resolution. The
+solver itself — the part that is MASDA — is 47 of those milliseconds and is bound by
+memory streaming, not by message-passing arithmetic; the identified next step on the
+CPU is a row-stripe parallelisation that deletes the merge outright, at the price of
+truncating the vertical filter at stripe boundaries. That is a measurable quality
+question, and it is queued behind a bigger one.
+
+**The bigger one is the GPU.** The TX2's GPU sits at load zero through all of this, and
+every structural property that made the CPU implementation fast — independent disparity
+planes, independent rows, a solver that is two strided reductions — is a description of
+a CUDA kernel. ReS2tAC runs SGM in real time on exactly this class of hardware; dense
+MASDA has strictly more parallel structure than SGM, plus a property SGM lacks: it
+already knows how confident it is. That is the next post.
+
+The measurement discipline is the part I would keep even if the matcher were thrown
+away. Five occupancy hypotheses were wrong before an instrument was right; the desktop
+predicted the wrong sign for the target twice; the "obviously correct" 5.2× became
+1.0× for reasons no amount of reading the code would have produced. Roughly half of
+what shipped came from an experiment that first said something I did not expect —
+which is, I think, the definition of an experiment worth running.
+
+---
+
+*The matcher is `de_dense.cpp` in the project's `core/`, plain C++14 with no
+dependencies; the benchmark regenerates every number in this post from the Middlebury
+scenes with one command. Part 1, with the derivation of the message equations, the
+$$\lambda$$/$$\gamma$$ semantics and the sparse results, is
+[here](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/).*
+
+**References**
+
+- Geiger, Roser, Urtasun, *Efficient Large-Scale Stereo Matching* (ELAS), ACCV 2010 —
+  support points + triangulated prior, the canonical "don't sweep" CPU matcher.
+- Bleyer, Rhemann, Rother, *PatchMatch Stereo*, BMVC 2011 — hypothesis propagation
+  instead of a sweep; slanted support windows.
+- Spangenberg et al., *Large Scale Semi-Global Matching on the CPU*, IV 2014 —
+  VGA×128 disparities above 16 Hz on a CPU; disparity subsampling.
+- Ruf et al., *ReS2tAC — UAV-Borne Real-Time SGM Stereo Optimized for Embedded ARM and
+  CUDA Devices*, Sensors 21(11), 2021 — the disparity-in-the-lanes NEON formulation and
+  the embedded CUDA baseline.
+- Goldman et al., *ESPReSSo: Efficient Slanted PatchMatch for Real-Time Spacetime
+  Stereo*, 3DV 2018 — edge-aware aggregation under shared plane hypotheses.
