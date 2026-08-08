@@ -12,7 +12,7 @@ author: Mario Lüder
 tags: [belief-propagation, probabilistic-inference, computer-vision, python]
 ---
 
-I want to continue my previous [post](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation) with a (useful) example to get more a feel how to use Loopy Belief Propagation in practice. 
+I want to continue my previous [post](/2022-09-17-Loopy-Belief-Propagation/) with a (useful) example to get more a feel how to use Loopy Belief Propagation in practice. 
 
 The aim is to remove noise from an image - which is only a toy example.
 
@@ -79,7 +79,7 @@ This takes just the probability of the observed pixel. $$s(white)$$ is $$0.6$$ i
 
 This implementation is naïve. It just aims to make things clear without the need of hiding the operations in optimizations.  
 
-Still I can simplify the code from previous [post](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation/) a little. I don't want to use the named tensor concept here. Simply because the names would be meaningless in this example. And also products can be simplified as the factors are two dimensional at maximum. Summing over the product becomes a matrix to vector multiplication - which I have shown in the previous post. Please see the section Factor-to-Variable Message Example 1.
+Still I can simplify the code from previous [post](/2022-09-17-Loopy-Belief-Propagation/) a little. I don't want to use the named tensor concept here. Simply because the names would be meaningless in this example. And also products can be simplified as the factors are two dimensional at maximum. Summing over the product becomes a matrix to vector multiplication - which I have shown in the previous post. Please see the section Factor-to-Variable Message Example 1.
 
 
 ### Graph implementation

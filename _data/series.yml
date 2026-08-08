@@ -1,0 +1,30 @@
+# Post series. Each entry drives three things: the hub page, the "next in this
+# series" footer that _includes/series-nav.html renders under every post in the
+# list, and the order both of them use. Posts are matched on `path`, so a
+# renamed file has to be renamed here too -- the nav simply disappears from a
+# post whose path no longer matches, it does not fail the build.
+
+belief_propagation:
+  title: "Loopy Belief Propagation, from the algorithm to a stereo matcher"
+  url: "/belief-propagation/"
+  posts:
+    - path: _posts/2022-09-17-Loopy-Belief-Propagation.md
+      blurb: >-
+        The algorithm itself, on a factor graph small enough to check every
+        message by hand, then in Python.
+    - path: _posts/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation.md
+      blurb: >-
+        The first graph with real loops in it: a Markov random field over image
+        pixels, run until the noise comes out.
+    - path: _posts/2023-08-21-Line-Fitting-using-Gaussian-Loopy-Belief-Propagation.md
+      blurb: >-
+        What changes when the variables are continuous and the distributions
+        Gaussian, worked through on a piecewise line fit.
+    - path: _posts/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA.md
+      blurb: >-
+        Max-sum in place of sum-product, derived for data association with
+        clutter and misdetection, and how it relates to SPADA.
+    - path: _posts/2026-08-07-MASDA-for-Sparse-Stereo-Matching.md
+      blurb: >-
+        The same algorithm pointed at stereo correspondence, measured against
+        ground truth and against exact linear assignment.

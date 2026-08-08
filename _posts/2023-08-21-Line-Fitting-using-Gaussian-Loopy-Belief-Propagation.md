@@ -19,8 +19,8 @@ This article describes the implementation of the inference of a piecewiese separ
 Please use the original notebook, if you want to experiment. It provides a very nice framework and you might want to use the functions I have deleted.
 
 Please see also my other articles on the topic, if you are not familiar with Belief Propagation. They provide very simple implementations of where discrete distributions are used.
-* [Loopy Belief Propagation - Python Implementation](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation)
-* [Simple Noise Reduction with Loopy Belief Propagation](https://mayio.github.io/2022-09-23-Noise-Reduction-Loopy-Belief-Propagation)
+* [Loopy Belief Propagation - Python Implementation](/2022-09-17-Loopy-Belief-Propagation/)
+* [Simple Noise Reduction with Loopy Belief Propagation](/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation/)
 
 ## Implementation
 
@@ -971,7 +971,7 @@ plt.show()
 ## References
 
 * [A visual introduction to Gaussian Belief Propagation](https://gaussianbp.github.io/) by Joseph Ortiz, Talfan Evans and Andrew J. Davison
-* [Loopy Belief Propagation - Python Implementation](https://mayio.github.io/2022-09-17-Loopy-Belief-Propagation) by me on this blog
-* [Simple Noise Reduction with Loopy Belief Propagation](https://mayio.github.io/2022-09-23-Noise-Reduction-Loopy-Belief-Propagation) by me on this blog
+* [Loopy Belief Propagation - Python Implementation](/2022-09-17-Loopy-Belief-Propagation/) by me on this blog
+* [Simple Noise Reduction with Loopy Belief Propagation](/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation/) by me on this blog
 * [Pattern Recognition and Machine Learning](https://www.microsoft.com/en-us/research/uploads/prod/2006/01/Bishop-Pattern-Recognition-and-Machine-Learning-2006.pdf) by Christopher M. Bishop.
 * [Exactly Sparse Delayed-State Filters](https://www.researchgate.net/publication/221077974_Exactly_Sparse_Delayed-State_Filters) by Ryan M. Eustice et. al.

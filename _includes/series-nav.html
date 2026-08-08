@@ -1,0 +1,36 @@
+{%- assign series = site.data.series.belief_propagation -%}
+{%- assign pos = -1 -%}
+{%- for item in series.posts -%}
+  {%- if item.path == page.path -%}{%- assign pos = forloop.index0 -%}{%- endif -%}
+{%- endfor -%}
+{%- if pos >= 0 -%}
+  {%- assign prev_i = pos | minus: 1 -%}
+  {%- assign next_i = pos | plus: 1 -%}
+  {%- assign prev_item = nil -%}
+  {%- if pos > 0 -%}{%- assign prev_item = series.posts[prev_i] -%}{%- endif -%}
+  {%- assign next_item = series.posts[next_i] -%}
+  <div class="series-nav">
+    <p>
+      Part {{ pos | plus: 1 }} of {{ series.posts.size }} in
+      <a href="{{ series.url | relative_url }}">{{ series.title }}</a>.
+    </p>
+    {%- if prev_item -%}
+      {%- assign prev_post = site.posts | where: "path", prev_item.path | first -%}
+      {%- if prev_post -%}
+    <p>
+      Previous: <a href="{{ prev_post.url | relative_url }}">{{ prev_post.title | strip_html }}</a>
+    </p>
+      {%- endif -%}
+    {%- endif -%}
+    {%- if next_item -%}
+      {%- assign next_post = site.posts | where: "path", next_item.path | first -%}
+      {%- if next_post -%}
+    <p>
+      Next in this series:
+      <a href="{{ next_post.url | relative_url }}">{{ next_post.title | strip_html }}</a>
+      &mdash; {{ next_item.blurb }}
+    </p>
+      {%- endif -%}
+    {%- endif -%}
+  </div>
+{%- endif -%}

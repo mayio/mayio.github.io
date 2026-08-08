@@ -30,7 +30,9 @@ description: "Engineering notes on probabilistic inference and computer vision: 
 
 navbar-links:
   About Me: "aboutme"
-  Topics: "/tags/"
+  Topics:
+    - Belief Propagation series: "/belief-propagation/"
+    - All tags: "/tags/"
   Author's home: "https://www.injournal.de"
 
 ################
@@ -109,7 +111,7 @@ share-links-active:
 
 # How to display the link to your website in the footer
 # Remove this if you don't want a link in the footer
-url-pretty: "mayio.github.io"
+url-pretty: "mariolueder.com"
 
 # Add the website title to the title of every page. Off: it appends 44 chars of
 # branding to every <title>, which pushes the keywords past where Google
