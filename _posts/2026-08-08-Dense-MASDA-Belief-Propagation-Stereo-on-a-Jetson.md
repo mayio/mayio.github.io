@@ -51,6 +51,11 @@ script against Middlebury ground truth, and every timing on the TX2 is an interl
 best-of-N because the board's run-to-run variance is 37% and single runs there mean
 nothing.
 
+*Update, 2026-08-09: [Part 3](https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/)
+draws the conclusion this post ends on — the image plane moves to the TX2's GPU, the
+CPU keeps the MASDA solve, and the matcher runs at **34.6 Hz at 848×480**,
+bit-identical to the CPU implementation.*
+
 ---
 
 ## 1. From keypoints to pixels: what stays, what changes
