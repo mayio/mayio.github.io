@@ -2,7 +2,7 @@
 layout: post
 title: 'MASDA for Sparse Stereo Matching'
 subtitle: What the uniqueness constraint is worth, measured against ground truth
-thumbnail-img: https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/thumb_teddy.png
+thumbnail-img: /assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/thumb_teddy.png
 date: '2026-08-07 19:00:00 +0200'
 categories: association
 comments: false
@@ -203,7 +203,7 @@ for x, x2, d in zip(xs[ok], xr[ok], disp[y][ok]):
         right[y, x2] = left[y, x]
 ```
 
-![scene](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/scene.png)
+![scene](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/scene.png)
 
 #### Three textures
 
@@ -256,7 +256,7 @@ compared against. Scoring those as wrong would charge the matcher for holes in t
 dataset, so they are counted separately and excluded from precision. On Teddy that
 is 10 matches out of 353.
 
-![real teddy](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/real_teddy.png)
+![real teddy](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/real_teddy.png)
 
 ---
 
@@ -265,7 +265,7 @@ is 10 matches out of 353.
 Descriptor degeneracy and matching ambiguity are different things, and only the
 second one matters.
 
-![descriptors](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/descriptors.png)
+![descriptors](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/descriptors.png)
 
 Over roughly 1400-2000 keypoints per image:
 
@@ -402,9 +402,9 @@ the rest would charge the matcher for the detector's misses.
 | MASDA | 1152 | 255 | 897 | 0.221 | 0.433 | 652.34 |
 | Optimal LAP (JV) | 1151 | 243 | 908 | 0.211 | 0.413 | 656.68 |
 
-![associations](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/associations_periodic.png)
+![associations](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/associations_periodic.png)
 
-![comparison](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/comparison.png)
+![comparison](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/comparison.png)
 
 ### 5.2 Real pairs
 
@@ -428,7 +428,7 @@ Middlebury's standard 1 px threshold.
 | MASDA | 441 | 430 | 336 | 0.781 | 0.783 | 204.98 |
 | Optimal LAP (JV) | 441 | 430 | 334 | 0.777 | 0.779 | 204.98 |
 
-![real cones](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/real_cones.png)
+![real cones](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/real_cones.png)
 
 Cones is the easier of the two and the figure shows why. Its estimated-against-true
 scatter sits on the diagonal, where Teddy's has a vertical smear at a true disparity
@@ -439,7 +439,7 @@ has no equivalent. Median score margin is 0.667 against Teddy's 0.542.
 
 Everything above is tables. This is the output they describe.
 
-![depth maps](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/depth_maps.png)
+![depth maps](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/depth_maps.png)
 
 Left is the dense ground truth. Middle is every match MASDA returned, plotted at
 its keypoint and coloured by the disparity it estimated, **on the same colour
@@ -549,7 +549,7 @@ image, under the same lighting.
 | synthetic broadband | 0.750 | 0.819 | 807 |
 | synthetic dots | 0.750 | 0.763 | 917 |
 
-![margin vs precision](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/margin_vs_precision.png)
+![margin vs precision](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/margin_vs_precision.png)
 
 Precision rises with margin across both data sources, and the real points interleave
 with the synthetic ones rather than sitting apart from them. It is a trend and not a
@@ -616,7 +616,7 @@ further factors, which is [section 7](#7-can-masda-express-the-ordering-constrai
 
 ### 5.6 Damping
 
-![damping](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/damping.png)
+![damping](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/damping.png)
 
 Undamped max-sum on the ambiguous problem does not settle; the largest message
 change plateaus instead of decaying. Damping of 0.3-0.5 stabilises it, and solution
@@ -949,7 +949,7 @@ scenes fills 78% of the known-ground-truth pixels with a bad-1.0 error rate of
 10.9%. Scored at MASDA's *own* keypoints — the only like-for-like comparison — SGM
 gets 0.858 against MASDA's 0.616.
 
-![dense vs sparse](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/dense_vs_sparse.png)
+![dense vs sparse](/assets/img/2026-08-07-MASDA-for-Sparse-Stereo-Matching_files/dense_vs_sparse.png)
 
 That gap is not about max-sum. It is about the **candidate set**. Decomposing every
 wrong match by whether the correct right keypoint was in that keypoint's candidate

@@ -2,7 +2,7 @@
 layout: post
 title: 'Path Planning with Quintic Functions in Frenét Coordinate System'
 subtitle: Introduction, Derivation and Code
-thumbnail-img: https://raw.githubusercontent.com/mayio/pathplanning/master/PathPlanningImages/FrenetFig2.png
+thumbnail-img: /assets/img/2022-02-13-PathPlanning_files/FrenetFig2.png
 date: '2022-02-13 11:02:00 +0200'
 categories: pathplanning
 comments: false
@@ -28,7 +28,7 @@ Maneuvers of a car shall be as smooth as possible. Hard turns or hard decelerati
 Assume that a car is lateral misplaced from the desired lane and should return to the optimal position while making a compromise between comfort and duration of the maneuver. The same compromise has to be found for the speed of the car. It shall not drive too close to or too far from the vehicle in the front. Two cost function, lateral and longitudinal, can be utilized to minimize jerk. 
 
 
-![Fig. 2 in Paper: Optimal Trajectory Generation for Dynamic Street Scenarios in a Frenét Frame.](https://raw.githubusercontent.com/mayio/pathplanning/master/PathPlanningImages/FrenetFig2.png)
+![Fig. 2 in Paper: Optimal Trajectory Generation for Dynamic Street Scenarios in a Frenét Frame.](/assets/img/2022-02-13-PathPlanning_files/FrenetFig2.png)
 *Fig. 2 in Paper: Optimal Trajectory Generation for Dynamic Street Scenarios in a Frenét Frame.*
 
 By switching from Cartesian to the Frenét reference frame it is possible to formulate a one dimensional trajectory with the root point $$\vec{r}$$ along the center line, the perpendicular offset $$d$$ and the covered arc length $$s$$. Jerk can be now defined as the derivatives $$\dddot{d}$$ and $$\dddot{s}$$. 
@@ -241,7 +241,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-02-13-PathPlanning_files/2022-02-13-PathPlanning_1_0.png)
+![png](/assets/img/2022-02-13-PathPlanning_files/2022-02-13-PathPlanning_1_0.png)
 
 
 The trajectory is a function that converges smoothly towards the desired perpendicular offset. 
@@ -452,7 +452,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-02-13-PathPlanning_files/2022-02-13-PathPlanning_4_0.png)
+![png](/assets/img/2022-02-13-PathPlanning_files/2022-02-13-PathPlanning_4_0.png)
 
 
 The main difference to the cubic function is that function for acceleration is now also smooth and free of jerk.

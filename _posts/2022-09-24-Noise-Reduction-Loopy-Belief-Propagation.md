@@ -154,7 +154,7 @@ from skimage.color import rgb2gray
 from skimage.color import rgba2rgb
 import skimage
 
-loopy_image_array_rgb = io.imread('https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/loopy.png')
+loopy_image_array_rgb = io.imread('/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/loopy.png')
 loopy_image_array_rgb = skimage.util.random_noise(loopy_image_array_rgb, mode='pepper')
 loopy_image_array_gray = rgb2gray(rgba2rgb(loopy_image_array_rgb));
 loopy_image_array_bw =  (loopy_image_array_gray > 0.5) + 0.;
@@ -165,7 +165,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_12_0.png)
+![png](/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_12_0.png)
 
 
 The pixel values must be loaded into the incoming message of the "observed" factors. We reduce the probability a bit, as we are not shure about the right value.
@@ -356,7 +356,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_22_0.png)
+![png](/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_22_0.png)
 
 
 
@@ -371,7 +371,7 @@ plt.show()
 ```
 
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_23_0.png)
+![png](/assets/img/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_files/2022-09-24-Noise-Reduction-Loopy-Belief-Propagation_23_0.png)
 
 
 ## References

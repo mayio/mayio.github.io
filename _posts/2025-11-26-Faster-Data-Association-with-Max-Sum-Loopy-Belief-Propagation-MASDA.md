@@ -2,7 +2,7 @@
 layout: post
 title: 'Faster Data Association with Max-Sum Loopy Belief Propagation (MASDA)'
 subtitle: Data Association with Misdetection and Clutter
-thumbnail-img: https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png
+thumbnail-img: /assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png
 date: '2025-11-26 18:50:00 +0200'
 categories: association
 comments: false
@@ -62,7 +62,7 @@ The factor graph structure is highly modular. Each factor represents a local fun
 
 The factor graph below and the notation is used throughout this article.
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png)
+![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_3_0.png)
     
 
 
@@ -221,13 +221,13 @@ $$
 $$
 
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_10_0.png)
+![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_10_0.png)
     
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_11_0.png)
+![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_11_0.png)
     
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_12_0.png)
+![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_12_0.png)
     
 
 
@@ -565,7 +565,7 @@ plt.grid(True)
 plt.show()
 ```
     
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_25_0.png)
+![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_25_0.png)
     
 
 ### Shuffle the measurements and object
@@ -801,7 +801,7 @@ plt.grid(True)
 plt.show()
 ```
 
-![png](https://raw.githubusercontent.com/mayio/mayio.github.io/master/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_29_0.png)
+![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_29_0.png)
     
 
 ### Discussion
