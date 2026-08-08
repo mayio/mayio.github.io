@@ -1,0 +1,28 @@
+{% if page.layout == "post" %}
+{%- assign ld_img = page["thumbnail-img"] | default: page["cover-img"] | default: site.avatar -%}
+{%- assign ld_author_url = "/aboutme.html" | absolute_url -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "mainEntityOfPage": { "@type": "WebPage", "@id": {{ page.url | absolute_url | jsonify }} },
+  "headline": {{ page.title | strip_html | truncate: 110, "" | jsonify }},
+  {% if page.subtitle %}"description": {{ page.subtitle | strip_html | jsonify }},{% endif %}
+  {% if ld_img %}"image": {{ ld_img | absolute_url | jsonify }},{% endif %}
+  {% if page.tags and page.tags != empty %}"keywords": {{ page.tags | join: ", " | jsonify }},{% endif %}
+  "datePublished": {{ page.date | date_to_xmlschema | jsonify }},
+  "dateModified": {{ page["last-updated"] | default: page.date | date_to_xmlschema | jsonify }},
+  "author": {
+    "@type": "Person",
+    "@id": {{ ld_author_url | jsonify }},
+    "name": {{ site.author | jsonify }},
+    "url": {{ ld_author_url | jsonify }}
+  },
+  "publisher": {
+    "@type": "Person",
+    "@id": {{ ld_author_url | jsonify }},
+    "name": {{ site.author | jsonify }}
+  }
+}
+</script>
+{% endif %}
