@@ -49,7 +49,7 @@ something measured worth reporting, it will appear here as a sixth part.
   "description": {{ page.subtitle | strip_html | jsonify }},
   "author": {
     "@type": "Person",
-    "@id": "https://www.mariolueder.com/aboutme.html",
+    "@id": "https://www.mariolueder.com/aboutme/",
     "name": {{ site.author | jsonify }}
   },
   "hasPart": [

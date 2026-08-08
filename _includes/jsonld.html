@@ -1,6 +1,6 @@
 {% if page.layout == "post" %}
 {%- assign ld_img = page["thumbnail-img"] | default: page["cover-img"] | default: site.avatar -%}
-{%- assign ld_author_url = "/aboutme.html" | absolute_url -%}
+{%- assign ld_author_url = "/aboutme/" | absolute_url -%}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",

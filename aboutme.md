@@ -26,8 +26,8 @@ My core expertise includes:
 {
   "@context": "https://schema.org",
   "@type": "Person",
-  "@id": "https://www.mariolueder.com/aboutme.html",
-  "url": "https://www.mariolueder.com/aboutme.html",
+  "@id": "https://www.mariolueder.com/aboutme/",
+  "url": "https://www.mariolueder.com/aboutme/",
   "name": "Mario Lüder",
   "jobTitle": "Software Engineer",
   "description": "Software engineer working on object tracking from lidar point clouds for autonomous driving, and on probabilistic inference on factor graphs.",
