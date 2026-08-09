@@ -39,23 +39,22 @@ makes it real-time on the TX2's GPU, bit-identically.*
 Results, briefly — pooled over eight Middlebury scenes with structured-light
 ground truth, roughly 1.3 million answers:
 
-- **The one-to-one constraint is worth +10.3 points of precision over
-  winner-take-all on identical scores**: 0.878 against 0.775, while keeping 96% of
+- **The one-to-one constraint is worth +10.7 points of precision over
+  winner-take-all on identical scores**: 0.884 against 0.776, while keeping 96% of
   WTA's correct answers. Per scene the gain is 8–13 points, largest where the
   texture is worst.
-- **Loopy max-sum is indistinguishable from the exact assignment optimum** where
-  the exact optimum is computable: per-row Jonker-Volgenant reaches 0.914 and
-  0.941 precision on Teddy and Cones; MASDA reaches 0.914 and 0.941.
-- It gets there **without** reaching the optimum everywhere: objective ratios are
-  0.9992 and 0.9996, with only 47–69% of rows exactly optimal. On the keypoint
-  problems this article originally studied, the ratio was 1.0000. Dense rows carry
-  far more exactly-tied scores, the tie-free condition of the max-product
-  correctness guarantee fails more often — and it costs nothing measurable. The
-  guarantee's *condition* is fragile; the *behaviour* is not.
-- **The representation decides the speed.** The same messages on a dense
-  per-row matrix: 96.9 s per frame. On sparse matrices: 1.57 s — 62× — and 6.4×
-  faster than compiled per-row Jonker-Volgenant. The engineered C++ descendant of
-  this NumPy study solves the same frames in ~11 ms, and the full GPU pipeline of
+- **Loopy max-sum matches the exact assignment optimum on precision** where the
+  exact optimum is computable: per-row Jonker-Volgenant reaches 0.914 and 0.941 on
+  Teddy and Cones; MASDA reaches 0.915 and 0.942.
+- It does that from **two message-passing iterations**, sitting 0.8% short of the
+  optimal objective with **1.6% of rows exactly optimal**. Thirty iterations close
+  the objective gap to 0.08% and make 47–69% of rows optimal — and return *no extra
+  precision at all*. The decision stabilises an order of magnitude before the
+  objective does, which is the single most useful thing I learned here.
+- **The representation decides the speed.** The same messages on dense per-row
+  matrices: 7.2 s per frame. On sparse matrices: **0.38 s — 19×** — and 20× faster
+  than compiled per-row Jonker-Volgenant. The engineered C++ descendant of this
+  NumPy study solves the same frames in ~11 ms, and the full GPU pipeline of
   Part 3 runs at 28.9 ms per frame end to end.
 
 Everything is regenerable: `article/dense_sparse_matrices.py` produces every
@@ -319,14 +318,18 @@ a factor of 62 on this problem, before any compiled code.
 A note on damping: undamped max-sum on heavily tied problems does not settle; the
 largest message change plateaus instead of decaying. Damping of 0.3–0.5 stabilises
 it, and solution quality is flat across that range. Message convergence is not the
-property you need anyway — the *decision* stabilises long before the messages do.
+property you need anyway — the *decision* stabilises long before the messages do,
+and [section 4.3](#43-two-iterations-against-thirty) measures how much sooner:
+fifteen times sooner, on these scenes.
 
 ---
 
 ## 4. Results against ground truth
 
-$$\lambda = \gamma = -0.1$$, 30 iterations, damping 0.4, candidates = top-2 per
-pixel from the aggregated volume, tolerance 1 px, unknown ground truth excluded.
+$$\lambda = \gamma = -0.1$$, **two iterations** — the shipping configuration —
+damping 0.4, candidates = top-2 per pixel from the aggregated volume, tolerance
+1 px, unknown ground truth excluded. ([Section 4.3](#43-two-iterations-against-thirty)
+measures what the other 28 iterations would buy, which is nothing.)
 Three solvers on **identical scores**: winner-take-all (argmax over the full
 volume — no uniqueness), MASDA on the sparse candidate matrix, and per-row exact
 assignment (Jonker-Volgenant with explicit $$\lambda$$/$$\gamma$$ slots, so
@@ -338,23 +341,23 @@ Pooled over all eight scenes — about 1.3 million answered pixels per method:
 
 | method | correct | wrong | precision |
 |---|---|---|---|
-| winner-take-all | 1,006,811 | 292,281 | 0.775 |
-| **MASDA, sparse matrices** | 970,709 | 134,260 | **0.878** |
+| winner-take-all | 252,567 | 72,838 | 0.776 |
+| **MASDA, sparse matrices** | 242,824 | 31,992 | **0.884** |
 
-**+10.3 points of precision for the one-to-one constraint, at the cost of 3.6% of
+**+10.7 points of precision for the one-to-one constraint, at the cost of 3.9% of
 the correct answers.** WTA answers everywhere and is wrong more than twice as
 often. Per scene:
 
 | scene | WTA | MASDA | Δ |
 |---|---|---|---|
-| Art | 0.696 | 0.821 | +12.5 |
-| Books | 0.792 | 0.894 | +10.2 |
-| Dolls | 0.810 | 0.910 | +10.0 |
-| Laundry | 0.661 | 0.770 | +10.9 |
-| Moebius | 0.787 | 0.874 | +8.7 |
-| Reindeer | 0.767 | 0.897 | +13.0 |
-| Cones | 0.858 | 0.941 | +8.3 |
-| Teddy | 0.829 | 0.914 | +8.5 |
+| Art | 0.700 | 0.830 | +13.0 |
+| Books | 0.796 | 0.901 | +10.5 |
+| Dolls | 0.810 | 0.915 | +10.5 |
+| Laundry | 0.661 | 0.777 | +11.6 |
+| Moebius | 0.788 | 0.878 | +9.0 |
+| Reindeer | 0.769 | 0.905 | +13.6 |
+| Cones | 0.859 | 0.942 | +8.3 |
+| Teddy | 0.826 | 0.911 | +8.5 |
 
 The gain is largest on the worst scenes (Art, Laundry, Reindeer), which is the
 right shape: where the descriptor evidence is weakest, mutual exclusivity has the
@@ -376,28 +379,59 @@ so the exact comparison covers every row of Teddy and Cones:
 
 | scene | method | correct | precision | objective ratio | rows at exact optimum |
 |---|---|---|---|---|---|
-| Teddy | MASDA | 131,152 | 0.914 | 0.99918 | 175 / 369 |
+| Teddy | MASDA, 2 iters | 130,413 | **0.915** | 0.9918 | 6 / 369 |
+| Teddy | MASDA, 30 iters | 131,152 | 0.914 | 0.9992 | 175 / 369 |
 | Teddy | JV (exact) | 131,210 | 0.914 | 1 | — |
-| Cones | MASDA | 131,443 | 0.941 | 0.99961 | 253 / 369 |
+| Cones | MASDA, 2 iters | 130,956 | **0.942** | 0.9939 | 0 / 369 |
+| Cones | MASDA, 30 iters | 131,443 | 0.941 | 0.9996 | 253 / 369 |
 | Cones | JV (exact) | 131,482 | 0.941 | 1 | — |
 
-Two readings, and both matter.
+Three readings, and the third is the one I did not expect.
 
-**Precision is indistinguishable from exact.** 0.914 against 0.914, 0.941 against
-0.941; the exact solver finds 58 and 39 more correct answers out of 131 thousand.
+**Precision is indistinguishable from exact.** 0.915 against 0.914, 0.942 against
+0.941. The exact solver finds a few hundred more correct answers out of 131
+thousand and is fractionally *less* precise, because it answers more often.
 Whatever approximation error loopy max-sum commits here, it is not made of wrong
 disparities.
 
-**And it is genuinely an approximation now.** On the original keypoint problems,
+**It is genuinely an approximation now.** On the original keypoint problems,
 MASDA's objective ratio against JV was 1.0000 — it simply *was* optimal, three
-problems out of three. On dense rows it is 0.9992 and 0.9996, optimal on only 47%
-and 69% of rows. The difference is ties: an aggregated Census volume quantises to
-few enough levels that exactly tied candidates are everywhere, the LP-uniqueness
-condition of the Bayati-Shah-Sharma guarantee fails routinely — and the cost of
-operating outside the guarantee is under a tenth of a percent of objective and
-zero measurable precision. The theory's condition is fragile on real data; the
-behaviour it protects is robust. I would rather know both numbers than either
-alone.
+problems out of three. Here it never is: 0.9918 at the shipping setting, and even
+at thirty iterations it reaches the exact optimum on only 47% and 69% of rows. The
+difference is ties. An aggregated Census volume quantises to few enough levels
+that exactly tied candidates are everywhere, so the LP-uniqueness condition of the
+Bayati-Shah-Sharma guarantee fails routinely.
+
+**And the gap costs nothing.** Two iterations sit 0.8% short of the optimal
+objective with 1.6% of rows optimal; thirty iterations close that to 0.08% and 47%
+— and return no extra precision whatsoever. The objective is a proxy, and this is
+the cleanest evidence I have that it is a loose one: an 0.8% objective deficit and
+a 30× shortfall in exactly-solved rows are invisible in the only quantity a
+consumer experiences.
+
+### 4.3 Two iterations against thirty
+
+Since the shipping implementation runs two iterations and this study originally
+ran thirty, the difference is worth its own table. Pooled over all eight scenes:
+
+| iterations | correct | precision | objective ratio (Teddy) | rows optimal |
+|---|---|---|---|---|
+| **2** (shipping) | 242,824 | **0.884** | 0.9918 | 6 / 369 |
+| 30 | 243,589 | 0.880 | 0.9992 | 175 / 369 |
+
+Fifteen times the message passing buys 0.3% more correct answers, 0.4 points
+*less* precision, and a solve four times slower. The extra iterations move
+marginal candidates from "not answered" to "answered", and those marginal
+candidates are wrong slightly more often than the population average — so the
+objective improves while precision does not.
+
+This is the quantitative form of a claim [section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation)
+makes qualitatively: **message convergence is not the property you need.** The
+messages are still moving at iteration thirty; the decision stopped moving around
+iteration two. Every number elsewhere in this article is therefore reported at the
+shipping setting, and I would treat any belief-propagation matcher quoting an
+iteration count without this comparison with suspicion — including my own earlier
+version of this page.
 
 ---
 
@@ -410,15 +444,18 @@ pixel, more than 99% of the arithmetic lands on $$-\infty$$ cells.
 
 One frame of Teddy (369 rows, 326,565 edges), same solvers, same answers:
 
-| representation | per frame | vs dense |
+| representation | 2 iterations | 30 iterations |
 |---|---|---|
-| dense per-row matrices | 96.9 s | — |
-| **sparse matrices (edge list)** | **1.57 s** | **62×** |
-| per-row JV (scipy, compiled) | 10.0 s | 9.7× |
+| dense per-row matrices | 7.22 s | 96.9 s |
+| **sparse matrices (edge list)** | **0.38 s** | 1.57 s |
+| per-row JV (scipy, compiled) | 7.6 s | 10.0 s |
 
-The sparse-matrix solver is 62× faster than the same mathematics on dense
-matrices, and 6.4× faster than compiled exact assignment — from interpreted
-NumPy. These are study numbers, not production numbers: the identical algorithm
+At the shipping setting the sparse-matrix solver is **19× faster than the same
+mathematics on dense matrices and 20× faster than compiled exact assignment** —
+from interpreted NumPy. (Jonker-Volgenant does not depend on the iteration count
+at all; its two entries differ only by measurement noise on a shared desktop,
+which is a useful reminder of how much precision to read into any single row of
+this table.) These are study numbers, not production numbers: the identical algorithm
 in C++ (Part 2) solves a frame in ~11 ms on a desktop and ~23 ms on the Jetson
 TX2's ARM cores, and the full GPU pipeline (Part 3) — cost volume, aggregation
 and solve together — runs at 28.9 ms per frame at 848×480, bit-identical to the
@@ -599,13 +636,14 @@ goes to die on embedded hardware.
 Where MASDA on sparse matrices is the right choice:
 
 - Cost is linear in plausible associations rather than in $$m \times n$$. With two
-  candidates per pixel, that is 62× over the same solver on dense matrices and
-  6.4× over compiled exact assignment, before any engineering.
+  candidates per pixel, that is 19× over the same solver on dense matrices and
+  20× over compiled exact assignment, before any engineering.
 - It is indistinguishable from optimal on precision, while being measurably
   non-optimal on the objective — the useful direction of that trade.
-- It is anytime. A handful of iterations gives a usable answer, and the decision
-  stabilises well before the messages do; the C++ implementation ships with two
-  iterations.
+- It is anytime, and [section 4.3](#43-two-iterations-against-thirty) puts a
+  number on it: two iterations give the same precision as thirty, at a quarter of
+  the cost. The decision stabilises an order of magnitude before the messages do,
+  which is why the C++ implementation ships with two.
 - It extends, and this is the main reason to prefer it over an exact LAP solver.
   Adding an ordering, smoothness or temporal factor keeps a factor graph a factor
   graph, whereas it stops being an assignment problem.
