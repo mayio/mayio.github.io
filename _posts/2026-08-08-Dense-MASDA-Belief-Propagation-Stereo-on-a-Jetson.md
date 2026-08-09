@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 'Dense Stereo Matching with Max-Sum Belief Propagation on a Jetson TX2 (MASDA, Part 2)'
-subtitle: 'Scaling the one-to-one matcher from keypoints to every pixel: what changes in the algorithm, what it costs on embedded hardware, and an honest account of removing the cost volume.'
+subtitle: 'From the NumPy study to a shipping C++ matcher: what survives engineering, what it costs on embedded hardware, and an honest account of removing the cost volume.'
 thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png
 date: '2026-08-08 22:00:00 +0200'
 categories: association
@@ -15,8 +15,9 @@ In [Part 1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Match
 applied MASDA — max-sum loopy belief propagation for data association — to sparse stereo
 matching and measured what the one-to-one constraint buys against ground truth. It ended
 with a list of things that would improve the matcher. This post is what happened when I
-stopped matching keypoints and made MASDA decide a disparity for *every pixel*, on a
-desktop first and then on the Jetson TX2 it is actually meant for.
+took Part 1's NumPy formulation — dense MASDA on sparse matrices — and made it a
+shipping C++ matcher, on a desktop first and then on the Jetson TX2 it is actually
+meant for.
 
 The interesting part is not that it works. It is *which parts of MASDA survived contact
 with 407,040 pixels per frame*, which parts had to change shape, and how often a
@@ -29,10 +30,10 @@ Results, briefly:
 - Dense MASDA is **ahead of OpenCV's SGM on accuracy** over eight Middlebury scenes with
   ground truth: **9.7% bad-1.0 against SGM's 10.9%**, at 76.0% coverage against 78.0%.
 - The same algorithm, the same $$\lambda$$, $$\gamma$$ and message equations as Part 1 —
-  what changed is the *representation*, again. Part 1 found a 157–230× difference
-  between a dense and an edge-list implementation of identical math. The dense matcher
-  repeats the lesson at the next scale: the cost volume the textbook says to build is
-  never materialised at all.
+  what changed is the *representation*, again. Part 1 measured 62× between dense
+  matrices and the sparse edge list on identical math. The C++ matcher repeats the
+  lesson at the next scale: the cost volume the textbook says to build is never
+  materialised at all.
 - Runtime went **246 → 29 ms** on the desktop over the course of this work (Teddy,
   450×375). At the camera's real 848×480 resolution it is **77 ms on the desktop and
   ~155 ms on the TX2** against a 33 ms real-time budget — not real-time on the target
@@ -58,19 +59,19 @@ bit-identical to the CPU implementation.*
 
 ---
 
-## 1. From keypoints to pixels: what stays, what changes
+## 1. From the study to the product: what stays, what changes
 
-Part 1's matcher associates $$m$$ left keypoints with $$n$$ right keypoints, at most one
-each way, with clutter $$\lambda$$ and misdetection $$\gamma$$ as the outside options.
-Dense stereo is the same problem with the nouns substituted once more: every left pixel
-$$(y, x)$$ is a measurement, and its candidate "objects" are the disparities
-$$d \in \{d_{\min} \dots d_{\max}\}$$, i.e. the right pixels $$(y, x-d)$$ on the same
-row.
+Part 1 formulates the row problem: every left pixel $$(y, x)$$ is a measurement,
+its candidate "objects" are the right pixels $$(y, x-d)$$ within the disparity
+range, clutter $$\lambda$$ and misdetection $$\gamma$$ are the outside options, and
+the candidates live in a sparse matrix. (An earlier incarnation of that article
+matched sparse *keypoints* instead; its own analysis found the detector bound
+everything, and the dense-on-sparse-matrices formulation replaced it.)
 
 The message equations do not change. The max-sum messages $$\rho$$ (over a left pixel's
 alternatives) and $$\beta$$ (over a right pixel's claimants) keep the closed form from
 Part 1, the damping stays at 0.4, and — this surprised me — **two iterations are
-enough** at this density, against the 60 I used for sparse problems. The graph is so
+enough** in the engineered version, against the study's 30. The graph is so
 regular that information does not have far to travel.
 
 What changes is everything around the equations:
@@ -83,14 +84,15 @@ post-filtering still reached 12.7% bad against my unaggregated 28.1%. So the sco
 → 9.7% bad-1.0 by itself), aggregated over an edge-aware support region by a recursive
 filter that stops at intensity edges. MASDA then runs on the aggregated scores. In
 factor-graph terms: better unaries beat a cheap pairwise term. I tried the cheap
-smoothness factor in Part 1 and it was worse at every weight; aggregation is where that
+smoothness factor early on and it was worse at every weight; aggregation is where that
 information actually enters.
 
 **The structure is a regular grid, so the edge list disappears again.** On a grid, "max
 over this left pixel's other candidates" is a contiguous run of $$D$$ scores, and "max
 over this right pixel's other claimants" is a strided walk — stride exactly $$D+1$$.
-Part 1 replaced NumPy scatter with an edge list for 157–230×; the dense form replaces
-the edge list with pointer arithmetic. Same math, third representation.
+Part 1 measured the same messages at 62× between dense matrices and the edge list;
+the C++ form replaces the edge list with pointer arithmetic on a regular grid. Same
+math, third representation.
 
 **Rows are independent**, because correspondences live on a rectified row. Every row is
 solved by an independent MASDA instance, which is what makes the whole thing
@@ -125,7 +127,7 @@ were all tuned after this, on a pipeline fast enough to iterate on.
 The solver's outputs are unchanged from Part 1: a disparity per pixel where the
 one-to-one assignment says so, and a **margin** — best minus second-best in the same
 message currency — which is the confidence the gate consumes. The margin gate trades
-coverage for precision exactly as it did for keypoints.
+coverage for precision exactly as in the study.
 
 ## 3. Where it stands against SGM
 
