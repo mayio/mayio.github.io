@@ -438,52 +438,106 @@ structure, where a LAP solver cannot follow.
 
 ## 6. Can MASDA express the ordering constraint?
 
-*(The derivation in this section is representation-independent. The measurements
-were made in this article's original keypoint configuration and are retained
-unchanged; the factor has not yet been re-measured in the dense configuration,
-where scanline DP methods get ordering for free and the comparison would mean
-something different.)*
-
 Scanline stereo methods use the ordering constraint: matches along a scanline
-should not cross. Plain MASDA cannot express it, which is a standing objection to
-using it for stereo. It can be added as a factor, and the derivation is tidier
-than I expected.
+should not cross. This is the one thing scanline dynamic programming gets for
+free and a plain assignment formulation does not, so it is the standing
+objection to using MASDA for dense stereo. It can be added as a factor, the
+derivation is tidier than I expected, and in the dense formulation it behaves
+differently from how it behaved on keypoints.
 
-Two associations $$(i,j)$$ and $$(i',j')$$ cross iff $$(x_i - x_{i'})(x_j - x_{j'}) < 0$$.
-A matching is order-preserving exactly when no two of its pairs cross, so ordering
-decomposes into *pairwise* factors with no higher-order term. That is what makes it
-tractable.
+Two associations $$(i,j)$$ and $$(i',j')$$ cross iff
+$$(x_i - x_{i'})(x_j - x_{j'}) < 0$$. A matching is order-preserving exactly when
+no two of its pairs cross, so ordering decomposes into *pairwise* factors with no
+higher-order term. That is what makes it tractable.
 
-Take $$\psi(c_e, c_f) = -\kappa$$ when both edges are on and crossing, else 0. For a
-pairwise factor between binary variables only the difference of the outgoing message
-matters, and with $$\mu_f = m_f(1) - m_f(0)$$:
+Take $$\psi(c_e, c_f) = -\kappa$$ when both edges are on and crossing, else 0. For
+a pairwise factor between binary variables only the difference of the outgoing
+message matters, and with $$\mu_f = m_f(1) - m_f(0)$$:
 
 $$
 \Delta_{\psi \to e} = \max(0, \mu_f - \kappa) - \max(0, \mu_f)
                     = -\operatorname{clamp}(\mu_f,\, 0,\, \kappa)
 $$
 
-The ordering message is the conflicting edge's own preference, clamped and negated.
-One scalar, constant time. I checked it against brute-force max-sum over 20000
-random cases; agreement is 4×10⁻¹⁶. Because these messages are additive on the
-edge they fold into the score, and the updates are the same two reductions with
-$$s + o$$ substituted for $$s$$. Nothing new has to be maintained.
+The ordering message is the conflicting edge's own preference, clamped and
+negated. One scalar, constant time. I checked it against brute-force max-sum over
+20000 random cases; agreement is 4×10⁻¹⁶.
 
-$$\kappa$$ stays finite: thin foreground objects genuinely violate ordering, and a
-hard constraint would delete them.
+**It composes with the sparse-matrix form without touching it.** Because these
+messages are additive on the edge they fold into the score: writing
+$$o_e = -\sum_{f \in X(e)} \operatorname{clamp}(b_f, 0, \kappa)$$ for the summed
+ordering pressure, the updates are the same two segment reductions of
+[section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation)
+with $$s + o$$ substituted for $$s$$. No new message type, no change to the
+solver's structure. This is the property that makes MASDA worth preferring over
+an exact assignment solver, which cannot follow here at all.
 
-Measured over eight real scenes (paired against the same scenes with the factor
-off), the factor at $$\kappa = 0.3$$ removed a third of the crossings on every
-scene and returned about +0.9% correct matches ($$p = 0.042$$) — while both of my
-synthetic tests had pointed the other way, for reasons worth keeping: on a
-periodic lattice the errors are order-*preserving* (a patch shifted by one period
-crosses nothing), so ordering is blind there and spends its influence perturbing
-correct matches. Crossings turned out to predict the *error rate* (Spearman
-$$\rho = -0.86$$ against precision), not the geometry: they are mostly a symptom
-of wrong matches, which is why penalising them removes wrong matches. The effect
-is small, cheap, and real; I would trust it more after someone repeats it.
+$$\kappa$$ stays finite. Thin foreground objects genuinely violate ordering, and
+a hard constraint would delete them — the standard failure of DP-based scanline
+methods, which is why they need forbidden-move exceptions.
 
----
+### 6.1 Measured, dense: it works, and it costs more than it returns
+
+Eight scenes, every fourth row, paired against the same rows with the factor off,
+$$\kappa = 0.3$$, damping raised to 0.6 because the ordering factors add loops
+the bipartite convergence result does not cover:
+
+| scene | precision, off | on | Δ | crossings retained |
+|---|---|---|---|---|
+| Art | 0.825 | 0.828 | +0.3 | 0.67× |
+| Books | 0.897 | 0.901 | +0.4 | 0.33× |
+| Dolls | 0.910 | 0.911 | +0.1 | 0.56× |
+| Laundry | 0.771 | 0.780 | +0.9 | 0.47× |
+| Moebius | 0.874 | 0.879 | +0.5 | 0.65× |
+| Reindeer | 0.900 | 0.907 | +0.7 | 0.60× |
+| Cones | 0.941 | 0.943 | +0.2 | 0.59× |
+| Teddy | 0.912 | 0.915 | +0.3 | 0.47× |
+
+**The factor does exactly what the derivation says: it removes about half the
+crossings (0.54× on average, never worse than 0.67×) and improves precision on
+all eight scenes** — mean +0.43 points, standard error 0.094, and unanimous,
+which matters more than the $$t$$-statistic on eight scenes. The gain is largest
+where the scene is worst (Laundry +0.9 at precision 0.771, Reindeer +0.7), the
+same shape uniqueness itself shows in [section 4.1](#41-what-uniqueness-is-worth).
+
+And it is **not worth switching on**, for a reason that is specific to the dense
+formulation:
+
+| | edges per row | crossing pairs per row | solve time |
+|---|---|---|---|
+| keypoints (original study) | ~30 | tens | negligible |
+| **dense, sparse matrices** | ~885 | **~2400** | **5–7× slower** |
+
+In the keypoint configuration, crossing pairs were a footnote — the scanline band
+held a handful of keypoints and the $$O(E_r^2)$$ enumeration cost nothing. In the
+dense configuration *the band is the whole row*: every pixel is a node, and
+crossing pairs outnumber edges by nearly 3:1. Enumerating and reducing over
+600,000 of them per scene is 5–7× the entire solve, to buy 0.4 points of
+precision — against a factor of 62 that the sparse-matrix representation buys for
+free, and 40 more correct answers out of 243,000.
+
+The $$\kappa$$ sweep says the same thing from another direction: 0.1, 0.3 and 0.8
+all land within 0.003 of one another on precision and within 1% on crossings
+retained. The factor saturates immediately — it is not being tuned into
+usefulness, it is doing all it can do and that is a small thing.
+
+So the honest position: **ordering is expressible, cleanly, inside the existing
+closed form, and on the dense problem it is a real but poor trade.** The $$O(E_r
+\log E_r)$$ Fenwick-tree construction I waved at in the keypoint version is now
+the *precondition* rather than an optimisation, and even at that price the
+0.4-point return does not obviously justify the loops it adds to a graph whose
+convergence is already unguaranteed. Where I would expect it to matter is
+precisely where the geometry stops helping: an uncalibrated pair, or
+two-dimensional temporal association, where nothing constrains ordering for free.
+
+One structural note worth keeping. Crossings correlate strongly with the error
+rate rather than with the geometry — the scenes with the most crossings (Art
+31,116; Laundry 27,126) are the two least precise, and Cones and Books, the most
+precise, have the fewest. Crossings are largely a *symptom* of wrong matches, not
+an independent property, which is why penalising them removes wrong matches and
+why the effect is largest on the scenes that need it most. It also caps the
+upside: you cannot fix an error the constraint cannot see, and a patch of
+repetitive texture matched one period off crosses nothing at all.
 
 ## 7. Comparison with existing work
 
@@ -552,10 +606,13 @@ Where MASDA on sparse matrices is the right choice:
 - It is anytime. A handful of iterations gives a usable answer, and the decision
   stabilises well before the messages do; the C++ implementation ships with two
   iterations.
-- It extends. Adding an ordering, smoothness or temporal factor keeps a factor
-  graph a factor graph, whereas it stops being an assignment problem.
-  [Section 6](#6-can-masda-express-the-ordering-constraint) is the demonstration:
-  a new pairwise constraint cost one clamped scalar per conflicting edge.
+- It extends, and this is the main reason to prefer it over an exact LAP solver.
+  Adding an ordering, smoothness or temporal factor keeps a factor graph a factor
+  graph, whereas it stops being an assignment problem.
+  [Section 6](#6-can-masda-express-the-ordering-constraint) is the demonstration
+  *and* the caution: a new pairwise constraint costs one clamped scalar per
+  conflicting edge and folds into the existing reductions — and on the dense
+  problem the crossing-pair enumeration it needs outweighs what it returns.
 - Clutter and misdetection are first-class rather than post-hoc thresholds, which
   matters when occlusion makes 10–20% of pixels unmatchable.
 
@@ -581,7 +638,9 @@ contains — MASDA equals exact inference — so the shortfall is in the evidenc
 small model trained against ground truth to output a calibrated log-likelihood
 ratio would change these numbers more than any refinement of the message passing.
 
-**A smoothness factor, done properly.** Neighbouring pixels on the same surface
+**A smoothness factor, done properly.** (Ordering is now measured rather than
+open — section 6 — and the interesting question it leaves is whether a
+neighbourhood factor pays where ordering did not.) Neighbouring pixels on the same surface
 have similar disparity, and the current factor graph ignores it. The cheap
 variants are measured negatives (Part 2's record); the real derivation — path
 aggregation as factors, so uniqueness and smoothness live in one graph — is the
