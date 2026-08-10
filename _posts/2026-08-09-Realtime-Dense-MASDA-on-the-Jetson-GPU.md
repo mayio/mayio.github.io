@@ -21,8 +21,8 @@ the TX2's GPU — which had sat at load zero through two days of CPU optimisatio
 and the CPU keeps the part that is actually [MASDA][gl-masda]: the
 [belief-propagation][gl-lbp] solve.
 
-*Every term this series uses is defined in [Part 1's appendix][gl-appendix], with links
-to the original papers. Terms link there on first use.*
+*Every term this series uses is defined in the [series glossary][gl-appendix], with
+links to the original papers. Terms link there on first use.*
 
 The result, measured as always as [interleaved best-of-N][gl-bestofn] on the target:
 
@@ -322,8 +322,8 @@ falling over.
 
 **References**
 
-Full citations with DOIs, along with every term this post uses, are in
-[Part 1's appendix][gl-appendix].
+Full citations with DOIs, along with every term this post uses, are in the
+[series glossary][gl-appendix].
 
 - [Ruf et al., *ReS2tAC — UAV-Borne Real-Time SGM Stereo Optimized for Embedded
   ARM and CUDA Devices*][gl-res2tac], Sensors 21(11), 2021 — disparity-in-the-lanes, the
@@ -337,39 +337,39 @@ Full citations with DOIs, along with every term this post uses, are in
 - Parts [1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/)
   and [2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/)
   of this series — the derivation of MASDA, and the dense matcher this post
-  makes real-time. Part 1 also carries the
-  [appendix of terms and sources][gl-appendix] for all three.
+  makes real-time. The [glossary of terms and sources][gl-appendix] serves all
+  three.
 
-[gl-appendix]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#appendix-terms-concepts-and-sources
-[gl-masda]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#masda
-[gl-lbp]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#loopy-belief-propagation
-[gl-factorgraph]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#factor-graph
-[gl-messages]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#messages-responsibility-and-availability
-[gl-greedy]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#greedy-decode
-[gl-one2one]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#one-to-one-constraint
-[gl-margin]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#margin-and-the-margin-gate
-[gl-keypoints]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#keypoints-and-detector-repeatability
-[gl-disparity]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#disparity
-[gl-costvolume]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#cost-volume
-[gl-census]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#census-transform
-[gl-tad]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#truncated-absolute-difference
-[gl-rf]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#edge-aware-recursive-filter
-[gl-sgm]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#semi-global-matching
-[gl-c2f]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#coarse-to-fine
-[gl-layout]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#disparity-major-and-disparity-minor-layout
-[gl-metrics]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#coverage-precision-and-the-bad-pixel-rate
-[gl-bestofn]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#interleaved-best-of-n
-[gl-patchmatch]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#patchmatch-stereo
-[gl-elas]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#elas
-[gl-res2tac]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#res2tac
-[gl-nehab]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#gpu-efficient-recursive-filtering
-[gl-tx2]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#jetson-tx2
-[gl-cores]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#a57-and-denver-cores
-[gl-q14]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#q14-fixed-point
-[gl-warp]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#warp-coalescing-and-shuffle
-[gl-cmem]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#constant-and-shared-memory
-[gl-pinned]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#pinned-memory-and-io-coherency
-[gl-fusion]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#kernel-fusion
-[gl-bandwidth]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#bandwidth-bound
-[gl-autovec]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#autovectorisation
-[gl-bitid]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#bit-identity
+[gl-appendix]: https://www.mariolueder.com/masda-glossary/
+[gl-masda]: https://www.mariolueder.com/masda-glossary/#masda
+[gl-lbp]: https://www.mariolueder.com/masda-glossary/#loopy-belief-propagation
+[gl-factorgraph]: https://www.mariolueder.com/masda-glossary/#factor-graph
+[gl-messages]: https://www.mariolueder.com/masda-glossary/#messages-responsibility-and-availability
+[gl-greedy]: https://www.mariolueder.com/masda-glossary/#greedy-decode
+[gl-one2one]: https://www.mariolueder.com/masda-glossary/#one-to-one-constraint
+[gl-margin]: https://www.mariolueder.com/masda-glossary/#margin-and-the-margin-gate
+[gl-keypoints]: https://www.mariolueder.com/masda-glossary/#keypoints-and-detector-repeatability
+[gl-disparity]: https://www.mariolueder.com/masda-glossary/#disparity
+[gl-costvolume]: https://www.mariolueder.com/masda-glossary/#cost-volume
+[gl-census]: https://www.mariolueder.com/masda-glossary/#census-transform
+[gl-tad]: https://www.mariolueder.com/masda-glossary/#truncated-absolute-difference
+[gl-rf]: https://www.mariolueder.com/masda-glossary/#edge-aware-recursive-filter
+[gl-sgm]: https://www.mariolueder.com/masda-glossary/#semi-global-matching
+[gl-c2f]: https://www.mariolueder.com/masda-glossary/#coarse-to-fine
+[gl-layout]: https://www.mariolueder.com/masda-glossary/#disparity-major-and-disparity-minor-layout
+[gl-metrics]: https://www.mariolueder.com/masda-glossary/#coverage-precision-and-the-bad-pixel-rate
+[gl-bestofn]: https://www.mariolueder.com/masda-glossary/#interleaved-best-of-n
+[gl-patchmatch]: https://www.mariolueder.com/masda-glossary/#patchmatch-stereo
+[gl-elas]: https://www.mariolueder.com/masda-glossary/#elas
+[gl-res2tac]: https://www.mariolueder.com/masda-glossary/#res2tac
+[gl-nehab]: https://www.mariolueder.com/masda-glossary/#gpu-efficient-recursive-filtering
+[gl-tx2]: https://www.mariolueder.com/masda-glossary/#jetson-tx2
+[gl-cores]: https://www.mariolueder.com/masda-glossary/#a57-and-denver-cores
+[gl-q14]: https://www.mariolueder.com/masda-glossary/#q14-fixed-point
+[gl-warp]: https://www.mariolueder.com/masda-glossary/#warp-coalescing-and-shuffle
+[gl-cmem]: https://www.mariolueder.com/masda-glossary/#constant-and-shared-memory
+[gl-pinned]: https://www.mariolueder.com/masda-glossary/#pinned-memory-and-io-coherency
+[gl-fusion]: https://www.mariolueder.com/masda-glossary/#kernel-fusion
+[gl-bandwidth]: https://www.mariolueder.com/masda-glossary/#bandwidth-bound
+[gl-autovec]: https://www.mariolueder.com/masda-glossary/#autovectorisation
+[gl-bitid]: https://www.mariolueder.com/masda-glossary/#bit-identity

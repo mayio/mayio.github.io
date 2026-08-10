@@ -32,6 +32,7 @@ navbar-links:
   About Me: "aboutme"
   Topics:
     - Belief Propagation series: "/belief-propagation/"
+    - MASDA stereo glossary: "/masda-glossary/"
     - All tags: "/tags/"
   Author's home: "https://www.injournal.de"
 

@@ -21,8 +21,8 @@ took Part 1's NumPy formulation — dense MASDA on sparse matrices — and made 
 shipping C++ matcher, on a desktop first and then on the [Jetson TX2][gl-tx2] it is
 actually meant for.
 
-*Every term this series uses is defined in [Part 1's
-appendix][gl-appendix] — factor graphs, Census, SGM, CUDA warps — with links to the
+*Every term this series uses is defined in the [series
+glossary][gl-appendix] — factor graphs, Census, SGM, CUDA warps — with links to the
 original papers. Terms link there on first use.*
 
 The interesting part is not that it works. It is *which parts of MASDA survived contact
@@ -428,8 +428,8 @@ $$\lambda$$/$$\gamma$$ semantics and the sparse results, is
 
 **References**
 
-Full citations with DOIs, along with every term this post uses, are in
-[Part 1's appendix][gl-appendix].
+Full citations with DOIs, along with every term this post uses, are in the
+[series glossary][gl-appendix].
 
 - [Geiger, Roser, Urtasun, *Efficient Large-Scale Stereo Matching*][gl-elas] (ELAS),
   ACCV 2010 — support points + triangulated prior, the canonical "don't sweep" CPU
@@ -444,45 +444,45 @@ Full citations with DOIs, along with every term this post uses, are in
 - [Nover, Achar, Goldman, *ESPReSSo: Efficient Slanted PatchMatch for Real-Time Spacetime
   Stereo*][gl-espresso], 3DV 2018 — edge-aware aggregation under shared plane hypotheses.
 
-[gl-appendix]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#appendix-terms-concepts-and-sources
-[gl-masda]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#masda
-[gl-maxsum]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#max-sum-max-product-and-sum-product
-[gl-lbp]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#loopy-belief-propagation
-[gl-assoc]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#data-association
-[gl-factorgraph]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#factor-graph
-[gl-messages]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#messages-responsibility-and-availability
-[gl-damping]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#damping
-[gl-clutter]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#clutter-and-misdetection
-[gl-one2one]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#one-to-one-constraint
-[gl-margin]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#margin-and-the-margin-gate
-[gl-segred]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#segment-reduction-and-max-excluding
-[gl-keypoints]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#keypoints-and-detector-repeatability
-[gl-rect]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#rectification-and-epipolar-geometry
-[gl-disparity]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#disparity
-[gl-costvolume]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#cost-volume
-[gl-census]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#census-transform
-[gl-hamming]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#hamming-distance-and-popcount
-[gl-tad]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#truncated-absolute-difference
-[gl-agg]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#cost-aggregation
-[gl-rf]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#edge-aware-recursive-filter
-[gl-smooth]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#smoothness-prior
-[gl-sgm]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#semi-global-matching
-[gl-lrc]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#left-right-consistency-check
-[gl-c2f]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#coarse-to-fine
-[gl-ambiguity]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#repetitive-texture-and-ambiguity
-[gl-middlebury]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#middlebury-stereo-datasets
-[gl-metrics]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#coverage-precision-and-the-bad-pixel-rate
-[gl-bestofn]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#interleaved-best-of-n
-[gl-elas]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#elas
-[gl-patchmatch]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#patchmatch-stereo
-[gl-rsgm]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#rsgm
-[gl-res2tac]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#res2tac
-[gl-espresso]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#espresso
-[gl-tx2]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#jetson-tx2
-[gl-cores]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#a57-and-denver-cores
-[gl-d435]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#realsense-d435-and-the-ir-pair
-[gl-neon]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#neon-and-simd
-[gl-q14]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#q14-fixed-point
-[gl-bandwidth]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#bandwidth-bound
-[gl-amdahl]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#amdahls-law
-[gl-bitid]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#bit-identity
+[gl-appendix]: https://www.mariolueder.com/masda-glossary/
+[gl-masda]: https://www.mariolueder.com/masda-glossary/#masda
+[gl-maxsum]: https://www.mariolueder.com/masda-glossary/#max-sum-max-product-and-sum-product
+[gl-lbp]: https://www.mariolueder.com/masda-glossary/#loopy-belief-propagation
+[gl-assoc]: https://www.mariolueder.com/masda-glossary/#data-association
+[gl-factorgraph]: https://www.mariolueder.com/masda-glossary/#factor-graph
+[gl-messages]: https://www.mariolueder.com/masda-glossary/#messages-responsibility-and-availability
+[gl-damping]: https://www.mariolueder.com/masda-glossary/#damping
+[gl-clutter]: https://www.mariolueder.com/masda-glossary/#clutter-and-misdetection
+[gl-one2one]: https://www.mariolueder.com/masda-glossary/#one-to-one-constraint
+[gl-margin]: https://www.mariolueder.com/masda-glossary/#margin-and-the-margin-gate
+[gl-segred]: https://www.mariolueder.com/masda-glossary/#segment-reduction-and-max-excluding
+[gl-keypoints]: https://www.mariolueder.com/masda-glossary/#keypoints-and-detector-repeatability
+[gl-rect]: https://www.mariolueder.com/masda-glossary/#rectification-and-epipolar-geometry
+[gl-disparity]: https://www.mariolueder.com/masda-glossary/#disparity
+[gl-costvolume]: https://www.mariolueder.com/masda-glossary/#cost-volume
+[gl-census]: https://www.mariolueder.com/masda-glossary/#census-transform
+[gl-hamming]: https://www.mariolueder.com/masda-glossary/#hamming-distance-and-popcount
+[gl-tad]: https://www.mariolueder.com/masda-glossary/#truncated-absolute-difference
+[gl-agg]: https://www.mariolueder.com/masda-glossary/#cost-aggregation
+[gl-rf]: https://www.mariolueder.com/masda-glossary/#edge-aware-recursive-filter
+[gl-smooth]: https://www.mariolueder.com/masda-glossary/#smoothness-prior
+[gl-sgm]: https://www.mariolueder.com/masda-glossary/#semi-global-matching
+[gl-lrc]: https://www.mariolueder.com/masda-glossary/#left-right-consistency-check
+[gl-c2f]: https://www.mariolueder.com/masda-glossary/#coarse-to-fine
+[gl-ambiguity]: https://www.mariolueder.com/masda-glossary/#repetitive-texture-and-ambiguity
+[gl-middlebury]: https://www.mariolueder.com/masda-glossary/#middlebury-stereo-datasets
+[gl-metrics]: https://www.mariolueder.com/masda-glossary/#coverage-precision-and-the-bad-pixel-rate
+[gl-bestofn]: https://www.mariolueder.com/masda-glossary/#interleaved-best-of-n
+[gl-elas]: https://www.mariolueder.com/masda-glossary/#elas
+[gl-patchmatch]: https://www.mariolueder.com/masda-glossary/#patchmatch-stereo
+[gl-rsgm]: https://www.mariolueder.com/masda-glossary/#rsgm
+[gl-res2tac]: https://www.mariolueder.com/masda-glossary/#res2tac
+[gl-espresso]: https://www.mariolueder.com/masda-glossary/#espresso
+[gl-tx2]: https://www.mariolueder.com/masda-glossary/#jetson-tx2
+[gl-cores]: https://www.mariolueder.com/masda-glossary/#a57-and-denver-cores
+[gl-d435]: https://www.mariolueder.com/masda-glossary/#realsense-d435-and-the-ir-pair
+[gl-neon]: https://www.mariolueder.com/masda-glossary/#neon-and-simd
+[gl-q14]: https://www.mariolueder.com/masda-glossary/#q14-fixed-point
+[gl-bandwidth]: https://www.mariolueder.com/masda-glossary/#bandwidth-bound
+[gl-amdahl]: https://www.mariolueder.com/masda-glossary/#amdahls-law
+[gl-bitid]: https://www.mariolueder.com/masda-glossary/#bit-identity
