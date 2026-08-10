@@ -1114,9 +1114,10 @@ runtime on the Jetson and 1.2 points of accuracy, and left it off.
 #### Hamming distance and popcount
 
 The distance between two Census descriptors is the number of differing bits: XOR
-them and count the ones. `popcount` is that count as a single instruction
-(`__builtin_popcountll` on x86, `cnt` on ARMv8), which is what makes a 48-bit
-descriptor comparison essentially free. Two unrelated descriptors agree on half
+them and count the ones. `popcount` is that count in hardware —
+`__builtin_popcountll` becomes one instruction on x86-64 and a short sequence
+around NEON's `cnt` on ARMv8 — which is what makes a 48-bit descriptor comparison
+essentially free. Two unrelated descriptors agree on half
 their bits by chance, which is the zero point the score scale of
 [section 1.3](#13-the-score) is built around.
 
@@ -1342,8 +1343,8 @@ Real-time SGM on exactly the hardware class this project targets — embedded AR
 with NEON, and CUDA on Jetson-class GPUs. Two of its design decisions were
 re-derived independently here before being recognised: putting *disparity* in the
 SIMD lanes rather than pixels (Part 2's NEON kernel) and the same assignment for
-CUDA warps (Part 3's layout). It is the paper I would hand someone starting this
-work.
+CUDA warps (Part 3's layout). It is the closest published prior art to this
+pipeline's engineering, on both processors.
 
 > B. Ruf, J. Mohrs, M. Weinmann, S. Hinz, J. Beyerer (2021). *ReS2tAC — UAV-Borne
 > Real-Time SGM Stereo Optimized for Embedded ARM and CUDA Devices.* Sensors
@@ -1352,8 +1353,8 @@ work.
 #### ESPReSSo
 
 Slanted PatchMatch made real-time for spacetime stereo, with edge-aware
-aggregation under shared plane hypotheses — the closest published relative of the
-aggregation strategy used here.
+aggregation under shared plane hypotheses — which is why Part 2 lists it among the
+work behind this pipeline's aggregation stage.
 
 > H. Nover, S. Achar, D. B. Goldman (2018). *ESPReSSo: Efficient Slanted
 > PatchMatch for Real-Time Spacetime Stereo.* 3DV.
@@ -1455,8 +1456,8 @@ Merging two passes so the intermediate never reaches memory. The principle Part 
 states — *a pass that stores exactly what the next pass reads is a fusion
 candidate, and a store nothing reads afterwards is a bug you are paying for* —
 found time three times on the GPU and *nothing* on the CPU, where the intermediate
-plane was already L2-resident. Same transformation, opposite verdict, which is the
-series' thesis in one word.
+plane was already L2-resident. Same transformation, opposite verdict — the series'
+thesis in one experiment.
 
 #### Bandwidth bound
 
