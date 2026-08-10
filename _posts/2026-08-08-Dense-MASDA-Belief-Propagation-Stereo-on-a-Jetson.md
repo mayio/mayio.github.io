@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 'Dense Stereo Matching with Max-Sum Belief Propagation on a Jetson TX2 (MASDA, Part 2)'
-subtitle: 'From the NumPy study to a shipping C++ matcher: what survives engineering, what it costs on embedded hardware, and an honest account of removing the cost volume.'
+subtitle: 'From the NumPy study to a shipping C++ matcher: what survives engineering, what it costs on embedded hardware, and why the cost volume is never built.'
 thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png
 date: '2026-08-08 22:00:00 +0200'
 categories: association
@@ -46,9 +46,8 @@ Results, briefly:
 - Runtime went **246 → 29 ms** on the desktop over the course of this work (Teddy,
   450×375). At the camera's real 848×480 resolution it is **77 ms on the desktop and
   ~155 ms on the TX2** against a 33 ms real-time budget — not real-time on the target
-  yet, and this post says so with the numbers rather than rounding in my favour. The
-  desktop-versus-TX2 comparison itself turned out to be one of the more instructive
-  results (section 6).
+  yet. The desktop-versus-TX2 comparison itself turned out to be one of the more
+  instructive results (section 6).
 - Removing the exhaustive [disparity][gl-disparity] sweep — the thing every fast
   published matcher does
   — was measured to be worth **5.2× of arithmetic** and delivered **1.0× of runtime** on
@@ -62,10 +61,10 @@ script against Middlebury ground truth, and every timing on the TX2 is an
 [interleaved best-of-N][gl-bestofn] because the board's run-to-run variance is 37% and
 single runs there mean nothing.
 
-*Update, 2026-08-09: [Part 3](https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/)
-draws the conclusion this post ends on — the image plane moves to the TX2's GPU, the
-CPU keeps the MASDA solve, and the matcher runs at **34.6 Hz at 848×480**,
-bit-identical to the CPU implementation.*
+*[Part 3](https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/) takes
+the step this post ends on: the image plane moves to the TX2's GPU, the CPU keeps
+the MASDA solve, and the matcher runs at **28.9 ms per frame at 848×480 — 34.6 Hz**,
+bit-identical to this implementation.*
 
 ---
 
@@ -75,9 +74,7 @@ Part 1 formulates the row problem: every left pixel $$(y, x)$$ is a measurement,
 its candidate "objects" are the right pixels $$(y, x-d)$$ within the disparity
 range, [clutter $$\lambda$$ and misdetection $$\gamma$$][gl-clutter] are the outside
 options, and
-the candidates live in a sparse matrix. (An earlier incarnation of that article
-matched sparse *[keypoints][gl-keypoints]* instead; its own analysis found the detector
-bound everything, and the dense-on-sparse-matrices formulation replaced it.)
+the candidates live in a sparse matrix.
 
 The message equations do not change. The max-sum [messages][gl-messages] $$\rho$$ (over a
 left pixel's
@@ -162,12 +159,12 @@ Moebius, Reindeer), pixel-pooled:
 
 (Runtimes are best-of-6 on Teddy and on a real [D435 IR pair][gl-d435]; the TX2 columns
 are interleaved best-of-6 because that board's run-to-run variance is 37%. SGM's 16 ms is
-OpenCV on the desktop; I have not built OpenCV on the TX2, so those cells are honestly
-empty rather than scaled — scaling desktop numbers to the Jetson is how this project
+OpenCV on the desktop; I have not built OpenCV on the TX2, so those cells are empty
+rather than scaled — scaling desktop numbers to the Jetson is how this project
 once got a figure wrong by 3×.)
 
-Ahead on accuracy by 1.2 points, behind on coverage by 2.0, behind on runtime — the
-honest scoreboard. The accuracy is the part I care about here, because SGM is a strong,
+Ahead on accuracy by 1.2 points, behind on coverage by 2.0, behind on runtime. The
+accuracy is the part I care about here, because SGM is a strong,
 heavily-engineered baseline and MASDA reaches past it with a *different mechanism*:
 uniqueness plus confidence instead of path-wise smoothness. SGM has no uniqueness
 constraint at all — it needs a [left-right consistency check][gl-lrc] bolted on
@@ -206,7 +203,8 @@ walk through all of them; the ones worth a paragraph each are the ones that gene
 
 **int16 through the score, filter and top-2.** The score is $$(24 - \text{hamming})/24$$
 in $$[-1, 1]$$, which maps exactly onto [Q14 fixed point][gl-q14] with headroom. Measured:
-**neutral on the desktop, 20% on the Jetson** — half the lanes, half the bandwidth, and
+**neutral on the desktop, 20% on the Jetson** — half the [lanes][gl-lanes], half the
+bandwidth, and
 [NEON][gl-neon] is 128-bit against AVX2's 256. This number pair is the whole argument for
 measuring
 on the target: the desktop said "don't bother", the target said "20%".
@@ -216,7 +214,8 @@ on the target: the desktop said "don't bother", the target said "20%".
 TX2, and it costs 1.2 points of bad-1.0 — a knob with a price tag on each side, recorded
 and left off.
 
-**A NEON kernel with disparity in the vector lanes.** The score loop was the largest
+**A [NEON][gl-neon] kernel with disparity in the [vector lanes][gl-lanes].** The score
+loop was the largest
 single item and its scalar [popcount][gl-hamming] looked like the reason. The first
 attempt vectorised
 eight *pixels'* popcounts and bought nothing: the table lookups next to the popcount
@@ -377,15 +376,14 @@ Two sub-experiments inside this construction are worth recording because they ar
   of the mask. Measured: *a full point worse* (10.6 → 11.6). The row-interval slack
   admits candidates a pixel's own band would exclude, and they help.
 
-Part 1 concluded that the candidate set, not the inference, decides the outcome — a
-perfect re-ranking of the sparse candidates topped out at 0.697
-[precision][gl-metrics] because the
-right answer was often simply absent. Both arrows here point the same way: what you
+Part 1 measured the same thing from the other side: exact per-row assignment is no
+more precise than MASDA on identical candidates (0.914 against 0.915 on Teddy), so
+the inference is not what bounds the result — the candidate set is. Both arrows here point the same way: what you
 offer the solver matters more than how cleverly you restrict it.
 
 ## 7. Where this leaves it
 
-The honest scoreboard for real-time on the TX2, at the camera's 848×480:
+Where real-time on the TX2 stands, at the camera's 848×480:
 
 | milestone | desktop 848×480 | TX2 848×480 | TX2 vs 30 Hz budget |
 |---|---|---|---|
@@ -456,7 +454,6 @@ Full citations with DOIs, along with every term this post uses, are in the
 [gl-one2one]: https://www.mariolueder.com/masda-glossary/#one-to-one-constraint
 [gl-margin]: https://www.mariolueder.com/masda-glossary/#margin-and-the-margin-gate
 [gl-segred]: https://www.mariolueder.com/masda-glossary/#segment-reduction-and-max-excluding
-[gl-keypoints]: https://www.mariolueder.com/masda-glossary/#keypoints-and-detector-repeatability
 [gl-rect]: https://www.mariolueder.com/masda-glossary/#rectification-and-epipolar-geometry
 [gl-disparity]: https://www.mariolueder.com/masda-glossary/#disparity
 [gl-costvolume]: https://www.mariolueder.com/masda-glossary/#cost-volume
@@ -482,6 +479,7 @@ Full citations with DOIs, along with every term this post uses, are in the
 [gl-cores]: https://www.mariolueder.com/masda-glossary/#a57-and-denver-cores
 [gl-d435]: https://www.mariolueder.com/masda-glossary/#realsense-d435-and-the-ir-pair
 [gl-neon]: https://www.mariolueder.com/masda-glossary/#neon-and-simd
+[gl-lanes]: https://www.mariolueder.com/masda-glossary/#vector-lanes
 [gl-q14]: https://www.mariolueder.com/masda-glossary/#q14-fixed-point
 [gl-bandwidth]: https://www.mariolueder.com/masda-glossary/#bandwidth-bound
 [gl-amdahl]: https://www.mariolueder.com/masda-glossary/#amdahls-law

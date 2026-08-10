@@ -169,7 +169,7 @@ post](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Su
 
 ### Clutter and misdetection
 
-The two outside options that keep the association problem honest. *Clutter*
+The two outside options that let the model leave something unmatched. *Clutter*
 ($$\lambda$$) is a measurement that belongs to nothing — in stereo, a left pixel
 whose surface is not visible on the right. *Misdetection* ($$\gamma$$) is an object
 that no measurement found — a right pixel hidden from the left camera. Both are
@@ -440,18 +440,6 @@ neighbour smoothness term would add is better added by
 graph carrying both uniqueness and path smoothness at once
 ([section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it)).
 
-### Keypoints and detector repeatability
-
-A *keypoint* is a distinctive image location found by a detector (FAST, Harris,
-ORB) and summarised by a descriptor, so matching considers only a few hundred
-points per image instead of every pixel. *Repeatability* is the fraction of
-keypoints found in one image that the detector also finds in the other — and it
-bounds recall before any matcher runs, since a point detected in only one view
-cannot be matched. This series began as a sparse-keypoint study and moved to the
-dense problem when that bound was measured at under 51% on this camera: the dense
-formulation deletes the detector, and with it the ceiling. Parts 1 and 2 refer back
-to "the original keypoint study" in that sense.
-
 ### Winner-take-all
 
 Take each pixel's best-scoring disparity and stop — no uniqueness, no interaction
@@ -499,8 +487,8 @@ open item rather than a detail.
 
 Solve at half resolution, upsample the answer, and search only a narrow band around
 it at full resolution — a pyramid strategy, and the family every fast published CPU
-matcher belongs to in some form. Part 2 measured the ceiling honestly (81.5% of
-known pixels keep the truth inside a ±2 band) and then measured the delivery: 5.2×
+matcher belongs to in some form. Part 2 measured the ceiling first (81.5% of
+known pixels keep the truth inside a ±2 band), then the delivery: 5.2×
 less arithmetic, 1.2–1.4× faster on the desktop, and *flat* on the Jetson, for
 three specific reasons that are the most useful negative result in the series.
 
@@ -667,15 +655,48 @@ own depth output but for its two infrared cameras as a raw stereo pair at
 848×480 — which is where that resolution, and the 33.3 ms frame budget, come from.
 [Product page](https://www.intelrealsense.com/depth-camera-d435/).
 
+### Vector lanes
+
+A SIMD register is one wide register divided into equal slices, and a *lane* is one
+of those slices. A 128-bit register holds 16 `int8` lanes, 8 `int16` lanes or 4
+`int32` lanes, and one instruction applies the same operation to every lane at
+once — lane 3 of the result depends only on lane 3 of the inputs. So the design
+question in any SIMD kernel is *what does a lane mean*: which axis of the problem
+you spread across the register. Put eight **pixels** in the lanes and the
+neighbouring per-pixel table lookups stay scalar gathers, which is the version that
+bought nothing in Part 2. Put eight **disparities** in the lanes and the eight
+Hamming distances for one pixel land in one register, both lookups become vector
+operations, and the loop vectorises properly. Same arithmetic, same register width,
+different meaning assigned to the lanes.
+
+A GPU thread has the same relationship to its [warp](#warp-coalescing-and-shuffle):
+32 lanes stepping together, and Part 3's layout is the same choice made again — one
+lane per disparity, not per pixel.
+
 ### NEON and SIMD
 
-Single Instruction Multiple Data: one instruction operating on several values at
-once. NEON is ARM's 128-bit version — eight `int16` lanes, against AVX2's 256 bits
-on the desktop, which is why halving the data type was worth 20% on the Jetson and
-nothing on the desktop. `vqtbl4q_u8` is the NEON table-lookup instruction across
-four registers that made the score loop's two lookup tables vector operations.
+*SIMD* — Single Instruction, Multiple Data — is one instruction operating on
+several values at once, in [lanes](#vector-lanes). It is how a modern CPU gets
+throughput on regular arithmetic without more cores: the loop body runs once and
+handles eight pixels.
+
+*NEON* is ARM's SIMD instruction set, present on every ARMv8 core including the
+Jetson's, with 128-bit registers — so eight `int16` lanes per instruction, against
+the 256 bits of the desktop's AVX2. That factor of two is the whole reason
+switching the pipeline from `int32` to `int16` was worth 20% on the Jetson and
+nothing on the desktop: on the wider machine the score already fit with lanes to
+spare. NEON is used through C *intrinsics* — functions like `vaddq_s16` that the
+compiler turns into one instruction each, so the kernel stays C rather than
+assembly. The one that mattered here is `vqtbl4q_u8`, a table lookup across four
+registers at once, which turned the score loop's two per-pixel lookup tables into
+vector operations. `-O3` also emits NEON on its own where it can
+([autovectorisation](#autovectorisation)); the hand-written kernel exists for the
+loops it cannot see through.
+
 [ARM's intrinsics reference](https://developer.arm.com/architectures/instruction-sets/intrinsics/)
-is searchable per instruction.
+is searchable per instruction, and
+[Arm's NEON programmer's guide](https://developer.arm.com/documentation/102474/latest/)
+is the introduction.
 
 ### Q14 fixed point
 

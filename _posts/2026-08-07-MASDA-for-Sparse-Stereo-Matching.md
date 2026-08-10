@@ -385,10 +385,9 @@ often. Per scene:
 
 The gain is largest on the worst scenes (Art, Laundry, Reindeer), which is the
 right shape: where the descriptor evidence is weakest, mutual exclusivity has the
-most to contribute. This is the dense-problem version of the original
-[keypoint study's](/masda-glossary/#keypoints-and-detector-repeatability) central finding — the
-constraint pays in proportion to the [ambiguity](/masda-glossary/#repetitive-texture-and-ambiguity) —
-now measured on three orders of magnitude more answers.
+most to contribute. The constraint pays in proportion to the
+[ambiguity](/masda-glossary/#repetitive-texture-and-ambiguity), and here that is
+measured over 1.3 million answers.
 
 For the full engineered pipeline (the C++ implementation with its
 [margin gate](/masda-glossary/#margin-and-the-margin-gate),
@@ -422,11 +421,10 @@ thousand and is fractionally *less* precise, because it answers more often.
 Whatever approximation error loopy max-sum commits here, it is not made of wrong
 disparities.
 
-**It is genuinely an approximation now.** On the original keypoint problems,
-MASDA's [objective ratio](/masda-glossary/#objective-ratio) against JV was 1.0000 — it simply *was*
-optimal, three
-problems out of three. Here it never is: 0.9918 at the shipping setting, and even
-at thirty iterations it reaches the exact optimum on only 47% and 69% of rows. The
+**It is genuinely an approximation.** The
+[objective ratio](/masda-glossary/#objective-ratio) against JV never reaches 1:
+0.9918 at the shipping setting, and even
+at thirty iterations MASDA reaches the exact optimum on only 47% and 69% of rows. The
 difference is ties. An aggregated Census volume quantises to few enough levels
 that exactly tied candidates are everywhere, so the
 [LP-uniqueness condition](/masda-glossary/#lp-relaxation-and-the-uniqueness-condition) of the
@@ -513,8 +511,8 @@ along a scanline
 should not cross. This is the one thing scanline dynamic programming gets for
 free and a plain assignment formulation does not, so it is the standing
 objection to using MASDA for dense stereo. It can be added as a factor, the
-derivation is tidier than I expected, and in the dense formulation it behaves
-differently from how it behaved on keypoints.
+derivation is tidier than I expected, and on the dense problem it costs more than
+it returns.
 
 Two associations $$(i,j)$$ and $$(i',j')$$ cross iff
 $$(x_i - x_{i'})(x_j - x_{j'}) < 0$$. A matching is order-preserving exactly when
@@ -572,17 +570,10 @@ where the scene is worst (Laundry +0.9 at precision 0.771, Reindeer +0.7), the
 same shape uniqueness itself shows in [section 4.1](#41-what-uniqueness-is-worth).
 
 And it is **not worth switching on**, for a reason that is specific to the dense
-formulation:
-
-| | edges per row | crossing pairs per row | solve time |
-|---|---|---|---|
-| keypoints (original study) | ~30 | tens | negligible |
-| **dense, sparse matrices** | ~885 | **~2400** | **5–7× slower** |
-
-In the keypoint configuration, crossing pairs were a footnote — the scanline band
-held a handful of keypoints and the $$O(E_r^2)$$ enumeration cost nothing. In the
-dense configuration *the band is the whole row*: every pixel is a node, and
-crossing pairs outnumber edges by nearly 3:1. Enumerating and reducing over
+formulation: *the band is the whole row.* Every pixel is a node, so a row carries
+~885 edges and ~2400 crossing pairs — they outnumber edges by nearly 3:1, and the
+$$O(E_r^2)$$ enumeration that is free on a handful of nodes becomes the largest
+item on the board. Enumerating and reducing over
 600,000 of them per scene is 5–7× the entire solve, to buy 0.4 points of
 precision — against a factor of 62 that the sparse-matrix representation buys for
 free, and 40 more correct answers out of 243,000.
@@ -592,11 +583,10 @@ all land within 0.003 of one another on precision and within 1% on crossings
 retained. The factor saturates immediately — it is not being tuned into
 usefulness, it is doing all it can do and that is a small thing.
 
-So the honest position: **ordering is expressible, cleanly, inside the existing
-closed form, and on the dense problem it is a real but poor trade.** The $$O(E_r
-\log E_r)$$ [Fenwick-tree](/masda-glossary/#fenwick-tree) construction I waved at in the keypoint
-version is now
-the *precondition* rather than an optimisation, and even at that price the
+So: **ordering is expressible inside the existing closed form, and on the dense
+problem it is a real but poor trade.** The $$O(E_r
+\log E_r)$$ [Fenwick-tree](/masda-glossary/#fenwick-tree) construction is a
+*precondition* here rather than an optimisation, and even at that price the
 0.4-point return does not obviously justify the loops it adds to a graph whose
 convergence is already unguaranteed. Where I would expect it to matter is
 precisely where the geometry stops helping: an uncalibrated pair, or
@@ -703,7 +693,7 @@ Where it is not:
 - The correctness guarantee is conditional and the condition fails routinely on
   dense rows — half the rows here have non-unique LP optima. In practice that
   cost under 0.1% of objective and no measurable precision, but nothing in the
-  theory promised it, and section 4.2 is the honest record.
+  theory promised it, and section 4.2 is the record.
 - It cannot create information. Where the aggregated evidence is degenerate it
   produces confident wrong answers; the margin gate exists to convert those back
   into abstentions, at the price of coverage.

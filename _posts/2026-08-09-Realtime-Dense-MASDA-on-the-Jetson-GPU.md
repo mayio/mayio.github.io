@@ -43,7 +43,7 @@ therefore carries over *by construction*: 9.7% [bad-1.0][gl-metrics] against
 
 ![progression](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/progression.png)
 
-The chart is the honest shape of the work: the port itself bought 2.7×, and the
+The chart is the shape of the work: the port itself bought 2.7×, and the
 remaining 2× came from five specific findings about where the first port wasted
 memory traffic, wasted issue slots, and waited. Sections 5–7 give the accounting.
 Three attempts failed and are documented with mechanisms, because two of them are
@@ -143,7 +143,7 @@ computes frame $$t{+}1$$ while the CPU solves frame $$t$$:
  CPU main │ launch t+1 ▏               join, loop ▏  │
 ```
 
-Two details make the overlap honest rather than hopeful:
+Two details make the overlap real rather than hopeful:
 
 - **The fetch runs on its own thread.** `cudaMemcpy` serializes with the stream,
   so the fetcher thread simply blocks until frame $$t{+}1$$'s kernels finish and
@@ -179,15 +179,15 @@ stored `vol[y][x][k]` — k innermost, padded to 64-aligned runs — and a
   *consecutive* addresses — one [coalesced][gl-warp] 256-byte window that slides one
   element
   per step and lives in L1. The left descriptor and the filter coefficient are
-  the same address for all 32 lanes — a hardware broadcast.
+  the same address for all 32 [lanes][gl-lanes] — a hardware broadcast.
 - Every volume access anywhere in the pipeline is a k-run: an aligned 64- or
   128-byte transaction. Nothing strides.
 - Each lane carries its own independent filter recurrence in registers. No lane
   waits on another; no shuffle is needed for the *filter* at all.
 
 The same assignment appears in [ReS2tAC (Ruf et al. 2021)][gl-res2tac] for SGM —
-disparity in
-the lanes — and this is the third time this project has re-derived their design
+disparity in the lanes, on [NEON][gl-neon] as well as CUDA — and this is the third
+time this project has re-derived their design
 point from a different direction. The resolution of the saga is that **neither
 layout was wrong; each machine's memory system picks its own.** A cache hierarchy
 with 512 KB of shared L2 wants one plane at a time, resident. A latency-hiding
@@ -197,7 +197,7 @@ was the actual mistake, and it is the most transferable lesson in the series.
 
 ## 5. Why it is fast, part I: work that no longer exists
 
-The honest accounting of the 56.6 → 28.9 ms factor is mostly *deletions*:
+The accounting of the 56.6 → 28.9 ms factor is mostly *deletions*:
 
 | removed | was costing | mechanism |
 |---|---|---|
@@ -210,9 +210,8 @@ The honest accounting of the 56.6 → 28.9 ms factor is mostly *deletions*:
 | the fetch, serialized | ~4 ms | moved to a thread; hides inside the solve |
 | solve variance | 10–20 ms of wander | Denver cores excluded by pinning |
 
-[Bandwidth arithmetic][gl-bandwidth] kept the process honest: each kernel's bytes-moved
-divided
-by its measured time, compared against the ~35–40 GB/s this board actually
+[Bandwidth arithmetic][gl-bandwidth] set the target for every kernel: bytes moved
+divided by measured time, compared against the ~35–40 GB/s this board actually
 achieves. A kernel at 19 GB/s is leaving half the machine idle, and *which half*
 (transactions too small, reuse thrashing, issue slots burned) decides the fix.
 The first port's kernels ran at 15–20 GB/s; the survivors run close to the
@@ -271,8 +270,8 @@ SGM *is* the GPU's comparison against SGM.
 ## 8. What the GPU taught me about the CPU implementation — tested, and mostly no
 
 I first drafted this section as three promising transfers. Then I built and
-measured them the same night, and the honest version is better than the
-promising one:
+measured them the same night, and what came back is better than what I had
+drafted:
 
 1. **Fuse the top-2 insert into the filter's last pass, delete the plane store**
    — the GPU's biggest single win, mapped back. Built, bit-identical, and **a
@@ -309,10 +308,9 @@ The matcher now runs at the camera's full resolution faster than the camera
 delivers frames, at the operating point that beats OpenCV's SGM on ground-truth
 accuracy, on a computer that costs less than the camera. The margin is 13%
 (28.9 vs 33.3 ms) at locked clocks; thermal throttling on a vehicle will eat
-into it, and that is the honest caveat on the headline.
+into it, and that is the caveat on the headline.
 
-What it unblocks is the actual plan: the sparse [feature][gl-keypoints] path, object
-tracking,
+What it unblocks is the actual plan: the sparse feature path, object tracking,
 and a temporal prior — the previous frame's disparities are exactly the mask
 that Part 2's [coarse-to-fine][gl-c2f] machinery wants, and unlike the half-resolution
 coarse pass, they are free. The GPU also remains mostly idle in the frame
@@ -348,7 +346,6 @@ Full citations with DOIs, along with every term this post uses, are in the
 [gl-greedy]: https://www.mariolueder.com/masda-glossary/#greedy-decode
 [gl-one2one]: https://www.mariolueder.com/masda-glossary/#one-to-one-constraint
 [gl-margin]: https://www.mariolueder.com/masda-glossary/#margin-and-the-margin-gate
-[gl-keypoints]: https://www.mariolueder.com/masda-glossary/#keypoints-and-detector-repeatability
 [gl-disparity]: https://www.mariolueder.com/masda-glossary/#disparity
 [gl-costvolume]: https://www.mariolueder.com/masda-glossary/#cost-volume
 [gl-census]: https://www.mariolueder.com/masda-glossary/#census-transform
@@ -367,6 +364,8 @@ Full citations with DOIs, along with every term this post uses, are in the
 [gl-cores]: https://www.mariolueder.com/masda-glossary/#a57-and-denver-cores
 [gl-q14]: https://www.mariolueder.com/masda-glossary/#q14-fixed-point
 [gl-warp]: https://www.mariolueder.com/masda-glossary/#warp-coalescing-and-shuffle
+[gl-lanes]: https://www.mariolueder.com/masda-glossary/#vector-lanes
+[gl-neon]: https://www.mariolueder.com/masda-glossary/#neon-and-simd
 [gl-cmem]: https://www.mariolueder.com/masda-glossary/#constant-and-shared-memory
 [gl-pinned]: https://www.mariolueder.com/masda-glossary/#pinned-memory-and-io-coherency
 [gl-fusion]: https://www.mariolueder.com/masda-glossary/#kernel-fusion
