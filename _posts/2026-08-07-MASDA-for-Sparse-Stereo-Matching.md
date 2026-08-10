@@ -1395,7 +1395,7 @@ CPU-only matcher, which needs the Denvers' throughput.
 #### RealSense D435 and the IR pair
 
 The camera this project is built around: an Intel RealSense D435, used not for its
-own depth output but for its two infrared cameras as a raw rectified stereo pair at
+own depth output but for its two infrared cameras as a raw stereo pair at
 848×480 — which is where that resolution, and the 33.3 ms frame budget, come from.
 [Product page](https://www.intelrealsense.com/depth-camera-d435/).
 
