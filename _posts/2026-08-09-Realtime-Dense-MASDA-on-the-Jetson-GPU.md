@@ -12,27 +12,34 @@ tags: [belief-propagation, data-association, computer-vision, embedded, cuda]
 ---
 
 [Part 2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/)
-ended on a diagnosis: the desktop and the Jetson TX2 disagree about which stage of
+ended on a diagnosis: the desktop and the [Jetson TX2][gl-tx2] disagree about which stage
+of
 the dense matcher is expensive, because they have different memory systems, and no
 single-machine implementation can be right for both. This post draws the
 conclusion: stop making one machine do both. The regular per-pixel work moves to
 the TX2's GPU — which had sat at load zero through two days of CPU optimisation —
-and the CPU keeps the part that is actually MASDA: the belief-propagation solve.
+and the CPU keeps the part that is actually [MASDA][gl-masda]: the
+[belief-propagation][gl-lbp] solve.
 
-The result, measured as always as interleaved best-of-N on the target:
+*Every term this series uses is defined in [Part 1's appendix][gl-appendix], with links
+to the original papers. Terms link there on first use.*
+
+The result, measured as always as [interleaved best-of-N][gl-bestofn] on the target:
 
 | | 848×480, D=60 | 450×375, D=60 |
 |---|---|---|
 | CPU only, six cores (Part 2) | 152 ms | 70 ms |
 | GPU + CPU, pipelined | **28.9 ms — 34.6 Hz** | **12.6 ms — 79 Hz** |
 
-Full quality — the 48-bit Census, the graded cost, the edge-aware recursive
-filter, all 60 disparities, the one-to-one solve with its margin gate — and
-**bit-identical to the CPU implementation**: `cmp` on the output files finds zero
+Full quality — the 48-bit [Census][gl-census], the [graded cost][gl-tad], the
+[edge-aware recursive filter][gl-rf], all 60 [disparities][gl-disparity], the
+[one-to-one][gl-one2one] solve with its [margin gate][gl-margin] — and
+**[bit-identical][gl-bitid] to the CPU implementation**: `cmp` on the output files finds
+zero
 differing bytes, on all eight ground-truth scenes and on a real camera pair,
 including through thirty pipelined frames. Every accuracy number from Part 2
-therefore carries over *by construction*: 9.7% bad-1.0 against SGM's 10.9%,
-without re-running a single benchmark.
+therefore carries over *by construction*: 9.7% [bad-1.0][gl-metrics] against
+[SGM's][gl-sgm] 10.9%, without re-running a single benchmark.
 
 ![progression](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/progression.png)
 
@@ -53,9 +60,11 @@ workloads:
   the top-2 selection touch every (pixel, disparity) pair in a pattern known at
   compile time. No data-dependent branching, no irregular memory. This is the
   textbook definition of GPU work.
-- **The solve side is irregular.** MASDA's messages flow along a graph whose
-  structure depends on the candidates — claimant lists per right pixel, a greedy
-  decode over a sorted order. It is also *small*: with two candidates per pixel
+- **The solve side is irregular.** MASDA's [messages][gl-messages] flow along a
+  [factor graph][gl-factorgraph] whose
+  structure depends on the candidates — claimant lists per right pixel, a
+  [greedy decode][gl-greedy] over a sorted order. It is also *small*: with two
+  candidates per pixel
   the whole row problem fits in 28 KB of cache, and six ARM cores handle the full
   frame in ~23 ms. Making this a GPU kernel would be work spent making the
   architecture uniform, not making the system faster.
@@ -63,7 +72,7 @@ workloads:
 The interface between the two is deliberately narrow: **two scored disparity
 candidates per pixel** — the same $$k=2$$ result from Part 2, where keeping more
 candidates measurably *hurt* accuracy. Eight megabytes per frame instead of a
-forty-nine megabyte cost volume. The GPU reduces; the CPU decides.
+forty-nine megabyte [cost volume][gl-costvolume]. The GPU reduces; the CPU decides.
 
 ```
    GPU (Pascal, 256 cores)                   CPU (4× A57, pinned)
@@ -79,8 +88,9 @@ forty-nine megabyte cost volume. The GPU reduces; the CPU decides.
 ```
 
 One Tegra-specific trap lives on that arrow, and it cost 300 ms twice before I
-believed it: **the TX2 has no I/O coherency, so every flavour of
-`cudaHostAlloc` memory — including the one the documentation's mental model calls
+believed it: **the TX2 has [no I/O coherency, so every flavour of
+`cudaHostAlloc` memory][gl-pinned] — including the one the documentation's mental model
+calls
 "cached pinned" — is uncached on the CPU side.** A solver reading candidates from
 such memory runs seven times slower than from ordinary pageable memory. The
 candidates travel through a staged `cudaMemcpy` into a plain `std::vector`, and
@@ -107,8 +117,8 @@ Per frame, in stream order:
         ──► CPU solve       480 independent rows on 4 A57s   (23 ms, parallel)
 ```
 
-The two fusions are where most of the speed lives, and they follow one principle
-worth stating because it found money three times:
+The two [fusions][gl-fusion] are where most of the speed lives, and they follow one
+principle worth stating because it found money three times:
 
 > **A pass that stores exactly what the next pass reads is a fusion candidate. A
 > store that nothing reads afterwards is a bug you are paying for.**
@@ -139,8 +149,9 @@ Two details make the overlap honest rather than hopeful:
   so the fetcher thread simply blocks until frame $$t{+}1$$'s kernels finish and
   then copies — *while the solve of frame $$t$$ is still running on the A57s*.
   Before this, the 4 ms copy sat serially in the loop.
-- **The solve threads pin themselves to the A57 cluster.** The TX2 has four A57s
-  and two Denver cores; unpinned, the scheduler wanders across both and the solve
+- **The solve threads pin themselves to the A57 cluster.** The TX2 has
+  [four A57s and two Denver cores][gl-cores]; unpinned, the scheduler wanders across both
+  and the solve
   varied 30–45 ms run to run — the same 37% variance that forced interleaved
   best-of-N timing in Part 2. Pinned to the A57s it sits at 22.6–23.1 ms. The
   Denvers are left to the CUDA driver and the fetcher.
@@ -153,18 +164,20 @@ bit-identity check instead of passing quietly.
 ## 4. The layout that ends the [d][x]-versus-[x][d] saga
 
 Parts 1 and 2 kept running into the same question: is the cost volume indexed
-disparity-major (`[d][x]`, whole planes per disparity) or disparity-minor
-(`[x][d]`, a run of disparities per pixel)? The CPU answered three times:
+[disparity-major (`[d][x]`, whole planes per disparity) or disparity-minor
+(`[x][d]`, a run of disparities per pixel)][gl-layout]? The CPU answered three times:
 disparity-major, because the aggregation filter wants whole constant-disparity
 planes, and the `[x][d]` transpose was measured as the dominant memory cost of
 the early implementation.
 
 **The GPU wants the opposite, and now I can say precisely why.** The volume is
-stored `vol[y][x][k]` — k innermost, padded to 64-aligned runs — and a warp is
+stored `vol[y][x][k]` — k innermost, padded to 64-aligned runs — and a
+[warp][gl-warp] is
 **32 consecutive disparities of one image row**:
 
 - The right-census reads for 32 consecutive $$d$$ at one $$x$$ are 32
-  *consecutive* addresses — one coalesced 256-byte window that slides one element
+  *consecutive* addresses — one [coalesced][gl-warp] 256-byte window that slides one
+  element
   per step and lives in L1. The left descriptor and the filter coefficient are
   the same address for all 32 lanes — a hardware broadcast.
 - Every volume access anywhere in the pipeline is a k-run: an aligned 64- or
@@ -172,7 +185,8 @@ stored `vol[y][x][k]` — k innermost, padded to 64-aligned runs — and a warp 
 - Each lane carries its own independent filter recurrence in registers. No lane
   waits on another; no shuffle is needed for the *filter* at all.
 
-The same assignment appears in ReS2tAC (Ruf et al. 2021) for SGM — disparity in
+The same assignment appears in [ReS2tAC (Ruf et al. 2021)][gl-res2tac] for SGM —
+disparity in
 the lanes — and this is the third time this project has re-derived their design
 point from a different direction. The resolution of the saga is that **neither
 layout was wrong; each machine's memory system picks its own.** A cache hierarchy
@@ -191,12 +205,13 @@ The honest accounting of the 56.6 → 28.9 ms factor is mostly *deletions*:
 | raw-score round trip through DRAM | ~8 ms | score fused into the horizontal forward pass |
 | separate top-2 kernel | 10.9 ms | fused into the vertical backward pass as a warp reduction |
 | backward-pass stores | ~3 ms | with top-2 fused, the filtered volume has no reader — the stores are deleted outright |
-| constant-memory replays in the score | ~2 ms | `__constant__` serializes on divergent indexing, and 32 different Hamming distances per warp is divergent *by construction*; the tables moved to shared memory |
+| constant-memory replays in the score | ~2 ms | [`__constant__`][gl-cmem] serializes on divergent indexing, and 32 different Hamming distances per warp is divergent *by construction*; the tables moved to shared memory |
 | half-width memory transactions | ~7 ms | every remaining pass works on k-pair `int32`s: full 128-byte lines |
 | the fetch, serialized | ~4 ms | moved to a thread; hides inside the solve |
 | solve variance | 10–20 ms of wander | Denver cores excluded by pinning |
 
-Bandwidth arithmetic kept the process honest: each kernel's bytes-moved divided
+[Bandwidth arithmetic][gl-bandwidth] kept the process honest: each kernel's bytes-moved
+divided
 by its measured time, compared against the ~35–40 GB/s this board actually
 achieves. A kernel at 19 GB/s is leaving half the machine idle, and *which half*
 (transactions too small, reuse thrashing, issue slots burned) decides the fix.
@@ -208,10 +223,11 @@ achievable ceiling, which is why I stopped: the remaining kernels are within
 
 **A warp-serial scan of the recurrence: 55.7 ms, worse than what it replaced.**
 The recursive filter is the awkward part of the port — a per-step integer
-recurrence with truncation, so the classic block-parallel GPU formulation (Nehab
-et al. 2011), which *reassociates* the filter algebraically, cannot reproduce it
+recurrence with truncation, so the classic
+[block-parallel GPU formulation (Nehab et al. 2011)][gl-nehab], which *reassociates* the
+filter algebraically, cannot reproduce it
 bit-exactly. My first "clever" alternative kept bit-exactness by letting the 32
-lanes of a warp take turns via shuffles: coalesced, exact — and 31 of 32 lanes
+lanes of a warp take turns via [shuffles][gl-warp]: coalesced, exact — and 31 of 32 lanes
 burn issue slots on every serial step. Instruction throughput, not bandwidth.
 The k-minor layout made the whole question moot: with a lane per *disparity*
 rather than per *position*, every lane runs its own recurrence and nothing is
@@ -241,7 +257,7 @@ eight scenes precisely for this reason, and this bug is why it keeps doing so.
 
 The whole port was built under one rule: **every intermediate keeps the CPU's
 exact integer arithmetic, so `cmp` on the final disparity map is the test.** The
-census bit order, the Q14 tables with C++ truncating division, the filter's
+census bit order, the [Q14][gl-q14] tables with C++ truncating division, the filter's
 int32-carry/int16-store pattern, the ascending-k strictly-greater top-2 — all
 replicated. This cost something (the Nehab-style filter was off the table), and
 it paid for itself three times in section 6: the tie bug and the padding bug are
@@ -266,7 +282,7 @@ promising one:
    passes** (814 KB against 2 MB), so the store the fusion deletes was nearly
    free and the re-read was nearly a cache hit. A first version was 18% worse
    outright, because putting the branchy insert inside the recurrence loop
-   killed the compiler's autovectorisation — a trap worth its own sentence:
+   killed the compiler's [autovectorisation][gl-autovec] — a trap worth its own sentence:
    on a CPU, fuse loops only if the hot loop stays branch-free.
 2. **Pin the worker threads to the A57 cluster** — it transformed the GPU
    tool's solve, so surely the CPU tool too. Measured: **40% worse on the
@@ -295,9 +311,10 @@ accuracy, on a computer that costs less than the camera. The margin is 13%
 (28.9 vs 33.3 ms) at locked clocks; thermal throttling on a vehicle will eat
 into it, and that is the honest caveat on the headline.
 
-What it unblocks is the actual plan: the sparse feature path, object tracking,
+What it unblocks is the actual plan: the sparse [feature][gl-keypoints] path, object
+tracking,
 and a temporal prior — the previous frame's disparities are exactly the mask
-that Part 2's coarse-to-fine machinery wants, and unlike the half-resolution
+that Part 2's [coarse-to-fine][gl-c2f] machinery wants, and unlike the half-resolution
 coarse pass, they are free. The GPU also remains mostly idle in the frame
 budget: ~26 ms of kernels leaves room the eventual CNN detector will claim, and
 if it claims too much, this pipeline degrades gracefully to 15 Hz rather than
@@ -305,16 +322,54 @@ falling over.
 
 **References**
 
-- Ruf et al., *ReS2tAC — UAV-Borne Real-Time SGM Stereo Optimized for Embedded
-  ARM and CUDA Devices*, Sensors 21(11), 2021 — disparity-in-the-lanes, the
+Full citations with DOIs, along with every term this post uses, are in
+[Part 1's appendix][gl-appendix].
+
+- [Ruf et al., *ReS2tAC — UAV-Borne Real-Time SGM Stereo Optimized for Embedded
+  ARM and CUDA Devices*][gl-res2tac], Sensors 21(11), 2021 — disparity-in-the-lanes, the
   assignment this project has now re-derived three times.
-- Nehab, Maximo, Lima, Hoppe, *GPU-Efficient Recursive Filtering and Summed-Area
-  Tables*, SIGGRAPH Asia 2011 — the block-parallel recursive filter, and by its
+- [Nehab, Maximo, Lima, Hoppe, *GPU-Efficient Recursive Filtering and Summed-Area
+  Tables*][gl-nehab], SIGGRAPH Asia 2011 — the block-parallel recursive filter, and by its
   existence, the explanation of why warp-serial scans lose.
-- Bleyer, Rhemann, Rother, *PatchMatch Stereo*, BMVC 2011; Geiger et al.,
-  *ELAS*, ACCV 2010 — the avoid-the-sweep family Part 2 measured against this
-  design.
+- [Bleyer, Rhemann, Rother, *PatchMatch Stereo*][gl-patchmatch], BMVC 2011;
+  [Geiger et al., *ELAS*][gl-elas], ACCV 2010 — the avoid-the-sweep family Part 2
+  measured against this design.
 - Parts [1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/)
   and [2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/)
   of this series — the derivation of MASDA, and the dense matcher this post
-  makes real-time.
+  makes real-time. Part 1 also carries the
+  [appendix of terms and sources][gl-appendix] for all three.
+
+[gl-appendix]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#appendix-terms-concepts-and-sources
+[gl-masda]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#masda
+[gl-lbp]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#loopy-belief-propagation
+[gl-factorgraph]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#factor-graph
+[gl-messages]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#messages-responsibility-and-availability
+[gl-greedy]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#greedy-decode
+[gl-one2one]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#one-to-one-constraint
+[gl-margin]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#margin-and-the-margin-gate
+[gl-keypoints]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#keypoints-and-detector-repeatability
+[gl-disparity]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#disparity
+[gl-costvolume]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#cost-volume
+[gl-census]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#census-transform
+[gl-tad]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#truncated-absolute-difference
+[gl-rf]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#edge-aware-recursive-filter
+[gl-sgm]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#semi-global-matching
+[gl-c2f]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#coarse-to-fine
+[gl-layout]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#disparity-major-and-disparity-minor-layout
+[gl-metrics]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#coverage-precision-and-the-bad-pixel-rate
+[gl-bestofn]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#interleaved-best-of-n
+[gl-patchmatch]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#patchmatch-stereo
+[gl-elas]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#elas
+[gl-res2tac]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#res2tac
+[gl-nehab]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#gpu-efficient-recursive-filtering
+[gl-tx2]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#jetson-tx2
+[gl-cores]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#a57-and-denver-cores
+[gl-q14]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#q14-fixed-point
+[gl-warp]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#warp-coalescing-and-shuffle
+[gl-cmem]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#constant-and-shared-memory
+[gl-pinned]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#pinned-memory-and-io-coherency
+[gl-fusion]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#kernel-fusion
+[gl-bandwidth]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#bandwidth-bound
+[gl-autovec]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#autovectorisation
+[gl-bitid]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#bit-identity
