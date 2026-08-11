@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 'Dense Stereo Matching with Max-Sum Belief Propagation on Sparse Matrices (MASDA)'
-subtitle: 'The one-to-one constraint applied to every pixel: what uniqueness buys over winner-take-all, how close loopy max-sum gets to the exact assignment optimum, and why the sparse-matrix representation decides everything.'
+subtitle: 'The one-to-one constraint applied to every pixel: what uniqueness buys over winner-take-all, how much of that the message passing is actually responsible for, how close loopy max-sum gets to the exact assignment optimum, and why the sparse-matrix representation decides everything.'
 thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png
 date: '2026-08-07 19:00:00 +0200'
 categories: association
@@ -38,11 +38,16 @@ Results, briefly — pooled over eight [Middlebury](/masda-glossary/#middlebury-
 scenes with [structured-light ground truth](/masda-glossary/#structured-light-ground-truth), roughly
 1.3 million answers:
 
-- **The [one-to-one constraint](/masda-glossary/#one-to-one-constraint) is worth +10.7 points of
+- **The [one-to-one constraint](/masda-glossary/#one-to-one-constraint) is worth +11.5 points of
   [precision](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate) over
-  [winner-take-all](/masda-glossary/#winner-take-all) on identical scores**: 0.884 against 0.776,
-  while keeping 96% of WTA's correct answers. Per scene the gain is 8–13 points,
+  [winner-take-all](/masda-glossary/#winner-take-all) on identical scores**: 0.890 against 0.775,
+  while keeping 95% of WTA's correct answers. Per scene the gain is 8–13 points,
   largest where the texture is worst.
+- **The constraint is what pays, not the message passing.** Applying the same greedy
+  one-to-one claim to each pixel's top-1 score — no messages at all — reaches 0.890.
+  Full MASDA reaches 0.883, trading 0.8 points of precision for 6,333 more answers.
+  The engineered matcher in Part 2 reproduces this independently, in different code
+  on a harder benchmark.
 - **Loopy [max-sum](/masda-glossary/#max-sum-max-product-and-sum-product) matches the exact
   [assignment](/masda-glossary/#linear-assignment-problem) optimum on precision** where the
   exact optimum is computable: per-row
@@ -365,12 +370,32 @@ Pooled over all eight scenes — about 1.3 million answered pixels per method:
 
 | method | correct | wrong | precision |
 |---|---|---|---|
-| winner-take-all | 252,567 | 72,838 | 0.776 |
-| **MASDA, sparse matrices** | 242,824 | 31,992 | **0.884** |
+| winner-take-all — argmax, no uniqueness | 1,006,811 | 292,281 | 0.775 |
+| **greedy uniqueness on the top-1 score, no messages** | 961,427 | 118,616 | **0.890** |
+| MASDA, sparse matrices, 2 iterations | 967,760 | 128,683 | 0.883 |
 
-**+10.7 points of precision for the one-to-one constraint, at the cost of 3.9% of
-the correct answers.** WTA answers everywhere and is wrong more than twice as
-often. Per scene:
+**+11.5 points of precision for the one-to-one constraint, at the cost of 4.5% of
+the correct answers.** WTA answers everywhere and is wrong more than twice as often.
+
+The middle row is the one that decides where the credit belongs, and it is worth
+being precise about. It applies the same greedy one-to-one claim MASDA's decode
+uses — best score first, each right pixel claimable once — to each pixel's *top-1
+score*, with no message passing at all. **The constraint delivers the entire gain.
+The message passing costs 0.8 points of precision and returns 6,333 more correct
+answers**, which is the same trade the margin gate offers for free.
+
+That is not the reading I expected when I built this, and it is reproduced
+independently in [Part 2][p2] by the engineered C++ matcher, in a different
+codebase, on a different benchmark, at a different tolerance: disabling the message
+passing there measures *better* and saves twelve milliseconds of CPU per frame. Two
+measurements that share no code agree on the shape.
+
+What the messages do earn is visible in the next two sections: they get closer to
+the exact assignment objective, and they do it while remaining an approximation.
+The objective is simply not the quantity a consumer experiences — which is the
+finding of section 4.2, arriving early.
+
+Per scene, WTA against MASDA:
 
 | scene | WTA | MASDA | Δ |
 |---|---|---|---|
@@ -391,13 +416,17 @@ measured over 1.3 million answers.
 
 For the full engineered pipeline (the C++ implementation with its
 [margin gate](/masda-glossary/#margin-and-the-margin-gate),
-which trades a little coverage for precision), the comparison against OpenCV's
-[SGM](/masda-glossary/#semi-global-matching) lands at
-**9.7% [bad-1.0](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate) against SGM's 10.9%**
-at 76% versus 78% [coverage](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate) —
-Part 2's headline, reproduced here only for orientation.
+which trades a little coverage for precision), [Part 2][p2] measures **25.2%
+[bad-1.0](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate) at 79.6%
+[coverage](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate)** on the fifteen
+Middlebury v3 training scenes, against the benchmark's own
+[SGM](/masda-glossary/#semi-global-matching) reference at 29.1% and 90.2% — a lower
+error rate over the pixels it answers, ten points fewer of them, and a curve that
+runs below SGM's where the two overlap. On these eight 2003/2005 scenes at native
+resolution it measures 9.8% against OpenCV SGM's 10.9%. Both are real; the harder
+benchmark and the looser one disagree about the ordering, and Part 2 shows why.
 
-![dense maps](/assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png)
+![dense maps](/assets/img/2026-08-08-Dense-MASDA_files/maps_a.png)
 
 ### 4.2 Against the exact optimum
 
@@ -719,10 +748,12 @@ variants are measured negatives (Part 2's record); the real derivation — path
 aggregation as factors, so uniqueness and smoothness live in one graph — is the
 interesting object this formulation makes possible.
 
-**[Sub-pixel disparity](/masda-glossary/#sub-pixel-disparity).** The candidates are integer; the fit
-to the correlation
-surface between them is not done, and depth accuracy depends on it more than on
-anything else downstream.
+**[Sub-pixel disparity](/masda-glossary/#sub-pixel-disparity) — since built, and it was the
+largest accuracy result in the project.** The candidates are integer, which forfeits up
+to half a pixel before any matching error. A parabola through the aggregated cost at
+the winner and its two neighbours took the engineered matcher from 41.5% to 25.2%
+bad-1.0 at unchanged coverage. [Part 2][p2] has the construction and the reason it
+went unmeasured for so long: the benchmark in use could not resolve it.
 
 **Temporal factors.** The same machinery for frame-to-frame association, where
 the previous frame's solution is a prior. A first prototype (frame $$t$$'s
@@ -744,3 +775,5 @@ Every term this article uses — factor graphs, max-sum messages, Census, cost
 aggregation, SGM, the Jetson's memory system — is defined in the
 [glossary for this series](/masda-glossary/), with links to the original work
 behind each one. Terms link there on first use, in all three parts.
+
+[p2]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
