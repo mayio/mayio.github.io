@@ -606,6 +606,34 @@ pipeline's engineering, on both processors.
 > Real-Time SGM Stereo Optimized for Embedded ARM and CUDA Devices.* Sensors
 > 21(11), 3938. [doi:10.3390/s21113938](https://doi.org/10.3390/s21113938)
 
+### Intrinsic curves
+
+A representation from Tomasi & Manduchi (1998) in which a scanline is a *trajectory* in
+a small feature space — intensity and its derivative along the row — rather than a
+sequence of pixels. Matching becomes a nearest-neighbour query in that space: the
+candidate disparities for a left pixel are the right pixels lying close to it on the
+curve, which can be found with a spatial index instead of by sweeping every disparity.
+
+Shahbazi et al. (2016) revisit it as a search-space reduction, reporting an 83%
+per-pixel reduction of the disparity range at full resolution with no hierarchical
+search, followed by SGM over the survivors.
+
+Measured in [Part 2][p2-icsg] on this project's data, the reduction reproduces — 13.9%
+of the range admitted per pixel — and does not help, because the admitted disparities
+of neighbouring pixels do not agree: the union over a 4×4 tile is 43.6% of the range.
+A per-pixel, spatially incoherent reduction is spendable by a matcher that scores
+candidates individually, which is what that paper's SGM does, and not by one that
+aggregates costs over whole constant-disparity planes.
+
+> Tomasi, C. & Manduchi, R. (1998). *Stereo Matching as a Nearest-Neighbor Problem.*
+> IEEE TPAMI 20(3):333-340. [doi:10.1109/34.667884](https://doi.org/10.1109/34.667884)
+>
+> Shahbazi, M., Sohn, G., Théau, J. & Menard, P. (2016). *Revisiting Intrinsic Curves
+> for Efficient Dense Stereo Matching.* ISPRS Annals III-3:123-130.
+> [doi:10.5194/isprs-annals-III-3-123-2016](https://doi.org/10.5194/isprs-annals-III-3-123-2016)
+
+[p2-icsg]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
+
 ### ESPReSSo
 
 Slanted PatchMatch made real-time for spacetime stereo, with edge-aware

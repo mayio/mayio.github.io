@@ -1,8 +1,8 @@
 ---
 layout: post
 title: 'Dense Stereo Matching with Max-Sum Belief Propagation on a Jetson TX2 (MASDA, Part 2)'
-subtitle: 'From the NumPy study to a shipping C++ matcher: what survives engineering, what it costs on embedded hardware, and why the cost volume is never built.'
-thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png
+subtitle: 'The dense matcher end to end: why the cost volume is never built, what sub-pixel disparity is worth, which parameters do nothing, and the ablation that says the message passing is not what makes this work.'
+thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_a.png
 date: '2026-08-08 22:00:00 +0200'
 categories: association
 comments: false
@@ -11,445 +11,414 @@ author: Mario Lüder
 tags: [belief-propagation, data-association, computer-vision, embedded]
 ---
 
-In [Part 1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/) I
-applied [MASDA][gl-masda] — [max-sum][gl-maxsum] [loopy belief propagation][gl-lbp] for
-[data association][gl-assoc] — to sparse stereo
-matching and measured what the [one-to-one constraint][gl-one2one] buys against ground
-truth. It ended
-with a list of things that would improve the matcher. This post is what happened when I
-took Part 1's NumPy formulation — dense MASDA on sparse matrices — and made it a
-shipping C++ matcher, on a desktop first and then on the [Jetson TX2][gl-tx2] it is
-actually meant for.
+This is the dense stereo matcher: a C++14 implementation of [MASDA][gl-masda] —
+[max-sum][gl-maxsum] [loopy belief propagation][gl-lbp] for
+[data association][gl-assoc] — applied to every pixel of an 848×480 infrared pair, on
+a [Jetson TX2][gl-tx2]. [Part 1][p1] derives the message equations and measures the
+[one-to-one constraint][gl-one2one] on sparse keypoints. This post is the algorithm at
+full frame rate: the representation it needs, the parameters that matter, the ones
+that turn out to do nothing, and a set of experiments that ended with a result I did
+not expect about the algorithm the series is named after.
 
-*Every term this series uses is defined in the [series
-glossary][gl-appendix] — factor graphs, Census, SGM, CUDA warps — with links to the
+*Every term is defined in the [series glossary][gl-appendix], with links to the
 original papers. Terms link there on first use.*
 
-The interesting part is not that it works. It is *which parts of MASDA survived contact
-with 407,040 pixels per frame*, which parts had to change shape, and how often a
-confident performance prediction died on contact with the hardware. I kept every
-measurement, including the failures — especially the failures, because half of what
-shipped came from an experiment that first said something I did not expect.
+The matcher, in one paragraph. Each left pixel is a measurement; its candidate
+"objects" are the right pixels along the same [rectified][gl-rect] row within the
+[disparity][gl-disparity] range. A [Census][gl-census] descriptor plus a
+[truncated absolute difference][gl-tad] scores every (pixel, disparity) pair; an
+edge-aware [recursive filter][gl-rf] [aggregates][gl-agg] those scores; the two
+best-scoring disparities per pixel are kept and everything else is discarded. MASDA
+then solves each row as an assignment problem via its [messages][gl-messages] with [clutter and
+misdetection][gl-clutter], and emits a disparity plus a [margin][gl-margin] — the gap
+between the best and second-best candidate — which is the confidence a downstream
+gate consumes.
 
-Results, briefly:
+Where it stands, measured on the fifteen [Middlebury v3][gl-middlebury] training
+scenes under the benchmark's own scoring rules:
 
-- Dense MASDA is **ahead of OpenCV's [SGM][gl-sgm] on accuracy** over eight
-  [Middlebury][gl-middlebury] scenes with
-  ground truth: **9.7% [bad-1.0][gl-metrics] against SGM's 10.9%**, at 76.0%
-  [coverage][gl-metrics] against 78.0%.
-- The same algorithm, the same [$$\lambda$$, $$\gamma$$][gl-clutter] and
-  [message equations][gl-messages] as Part 1 —
-  what changed is the *representation*, again. Part 1 measured 62× between dense
-  matrices and the sparse edge list on identical math. The C++ matcher repeats the
-  lesson at the next scale: the [cost volume][gl-costvolume] the textbook says to build
-  is never materialised at all.
-- Runtime went **246 → 29 ms** on the desktop over the course of this work (Teddy,
-  450×375). At the camera's real 848×480 resolution it is **77 ms on the desktop and
-  ~155 ms on the TX2** against a 33 ms real-time budget — not real-time on the target
-  yet. The desktop-versus-TX2 comparison itself turned out to be one of the more
-  instructive results (section 6).
-- Removing the exhaustive [disparity][gl-disparity] sweep — the thing every fast
-  published matcher does
-  — was measured to be worth **5.2× of arithmetic** and delivered **1.0× of runtime** on
-  the TX2. The reasons are specific and instructive, and they are the meat of section 6.
-- Two failed sub-experiments reinforced Part 1's central finding from a new direction:
-  **the candidate set decides the outcome**. Widening it helped even when the widening
-  looked unprincipled; narrowing it helped even when the narrowing looked principled.
+| | [bad-1.0][gl-metrics] | [coverage][gl-metrics] |
+|---|---|---|
+| **dense MASDA** | **25.2%** | 79.6% |
+| Middlebury's [SGM][gl-sgm] reference | 29.1% | 90.2% |
 
-Everything here can be regenerated: the matcher is one C++ file, the benchmark is one
-script against Middlebury ground truth, and every timing on the TX2 is an
-[interleaved best-of-N][gl-bestofn] because the board's run-to-run variance is 37% and
-single runs there mean nothing.
-
-*[Part 3](https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/) takes
-the step this post ends on: the image plane moves to the TX2's GPU, the CPU keeps
-the MASDA solve, and the matcher runs at **28.9 ms per frame at 848×480 — 34.6 Hz**,
-bit-identical to this implementation.*
+Ahead on the error rate over answered pixels, ten points behind on how many pixels
+it answers. Section 5 shows the whole curve, which is the only fair way to read a
+matcher that declines to answer.
 
 ---
 
-## 1. From the study to the product: what stays, what changes
-
-Part 1 formulates the row problem: every left pixel $$(y, x)$$ is a measurement,
-its candidate "objects" are the right pixels $$(y, x-d)$$ within the disparity
-range, [clutter $$\lambda$$ and misdetection $$\gamma$$][gl-clutter] are the outside
-options, and
-the candidates live in a sparse matrix.
-
-The message equations do not change. The max-sum [messages][gl-messages] $$\rho$$ (over a
-left pixel's
-alternatives) and $$\beta$$ (over a right pixel's claimants) keep the closed form from
-Part 1, the [damping][gl-damping] stays at 0.4, and — this surprised me — **two
-iterations are
-enough** in the engineered version, against the study's 30. The graph is so
-regular that information does not have far to travel.
-
-What changes is everything around the equations:
-
-**The unary score is [aggregated][gl-agg], not raw.** A single 7×7
-[Census][gl-census] comparison gives 49
-[Hamming][gl-hamming] levels, and measured against SGM that quantisation — not the
-missing [smoothness prior][gl-smooth] — is where the accuracy goes: SGM stripped of its
-smoothness term *and* its
-post-filtering still reached 12.7% bad against my unaggregated 28.1%. So the score for
-(pixel, disparity) is Census plus a [truncated absolute difference][gl-tad] (a graded
-cost, 10.3%
-→ 9.7% bad-1.0 by itself), aggregated over an edge-aware support region by a
-[recursive filter][gl-rf]
-that stops at intensity edges. MASDA then runs on the aggregated scores. In
-[factor-graph][gl-factorgraph] terms: better unaries beat a cheap pairwise term. I tried
-the cheap smoothness factor early on and it was worse at every weight; aggregation is
-where that information actually enters.
-
-**The structure is a regular grid, so the edge list disappears again.** On a grid,
-["max over this left pixel's other candidates"][gl-segred] is a contiguous run of $$D$$
-scores, and "max
-over this right pixel's other claimants" is a strided walk — stride exactly $$D+1$$.
-Part 1 measured the same messages at 62× between dense matrices and the edge list;
-the C++ form replaces the edge list with pointer arithmetic on a regular grid. Same
-math, third representation.
-
-**Rows are independent**, because correspondences live on a [rectified][gl-rect] row.
-Every row is
-solved by an independent MASDA instance, which is what makes the whole thing
-embarrassingly parallel — and later, a GPU kernel rather than a rewrite.
-
-## 2. The cost volume is never built
+## 1. The cost volume is never built
 
 The textbook pipeline materialises a $$W \times H \times D$$ [cost volume][gl-costvolume]
-— 40 MB per
-frame at 450×375, 98 MB at 848×480 — then aggregates it, then reads it back to pick
-winners. I built that first. Then I measured what the solver actually consumes.
+— 40 MB per frame at 450×375, 98 MB at 848×480 — aggregates it, then reads it back to
+pick winners. I built that first, then measured what the solver actually consumes.
 
-**How many candidates per pixel does MASDA need?** I swept $$k$$, the number of
+**How many candidates per pixel does MASDA need?** Sweeping $$k$$, the number of
 top-scoring disparities kept per pixel, against the full volume:
 
 | k | 1 | **2** | 3 | 4 | 8 | full D |
 |---|---|---|---|---|---|---|
 | bad-1.0 | worse | **best** | = | = | = | = |
 
-Two. Not approximately two — *exactly* two, and $$k=2$$ was measurably better than
-$$k=8$$, because the extra candidates are noise the solver has to argue with. This is
-Part 1's precision-by-margin table speaking again: the second-best candidate carries
-real information (it defines the margin), the eighth carries none.
+Two — and $$k=2$$ was measurably better than $$k=8$$, because the extra candidates are
+noise the solver has to argue with. This is Part 1's precision-by-margin table
+speaking again: the second-best candidate carries real information, since it defines
+the margin. The eighth carries none.
 
 With $$k=2$$, the running top-2 per pixel *is* the reduced volume. So the pipeline
-computes one disparity plane at a time — score, filter — and inserts it into a per-pixel
-top-2 list, and the 40 MB array never exists. The insert's common case is a rejection
-that reads one cached plane, so the whole stage is one streaming pass over the scored
-planes. Removing the volume was measured at **1.9× end-to-end**, and it is also what
-freed the accuracy work: the aggregation radius, the graded cost and the margin gate
-were all tuned after this, on a pipeline fast enough to iterate on.
+computes one disparity plane at a time — score, filter, insert — and the 40 MB array
+never exists:
 
-The solver's outputs are unchanged from Part 1: a disparity per pixel where the
-one-to-one assignment says so, and a **[margin][gl-margin]** — best minus second-best in
-the same
-message currency — which is the confidence the gate consumes. The margin gate trades
-coverage for precision exactly as in the study.
+![no volume](/assets/img/2026-08-08-Dense-MASDA_files/novolume.png)
 
-## 3. Where it stands against SGM
+The insert's common case is a rejection that reads one cached plane, so the whole
+stage is a single streaming pass over the scored planes. Removing the volume measured
+**1.9× end to end**, and it is also what made the accuracy work possible: every
+parameter in section 6 was swept on a pipeline fast enough to iterate on.
 
-Eight Middlebury scenes with ground truth (Teddy, Cones, Art, Books, Dolls, Laundry,
-Moebius, Reindeer), pixel-pooled:
+Three structural properties fall out of this design and matter later:
 
-| | coverage | bad-1.0 | desktop 450×375 | TX2 450×375 | TX2 848×480 |
+- **Rows are independent**, because correspondences live on a rectified row. Each row
+  is a separate MASDA instance.
+- **Disparity planes are independent** until the top-2 insert, which is a per-pixel
+  reduction.
+- **The aggregation needs whole constant-disparity planes.** The recursive filter runs
+  across the image at one disparity. This constraint decides the outcome of two
+  separate experiments in section 8, and it is the single most consequential property
+  of the design.
+
+## 2. Sub-pixel disparity: the largest accuracy result in the project
+
+The solver picks a disparity from a discrete set, so its output is an integer. That
+forfeits up to half a pixel before any matching error, and fixing it is worth more
+than every other accuracy change in this post combined.
+
+The [fit][gl-subpix] is a parabola through the aggregated cost at the winning disparity and its two
+neighbours, with the vertex taken as the answer:
+
+![sub-pixel](/assets/img/2026-08-08-Dense-MASDA_files/subpixel.png)
+
+Panel (c) is the reason this matters and the reason it went unnoticed for a long time.
+**A perfect integer disparity map scores 45.6% bad-1.0 on Middlebury v3 at quarter
+resolution, where a perfect floating-point one scores 0.8%.** The benchmark's threshold
+is one pixel of *full* resolution, which is a quarter of a pixel of what the matcher
+actually computes — and no integer answer can get inside a quarter-pixel threshold,
+however right it is. The matcher's own integer output measured 41.5%, which is close
+to that 45.6% ceiling: the matching was already good, and the output format was
+throwing it away.
+
+With the fit: **41.5% → 25.2%, at coverage that does not move** — 16.3 points. The fit changes
+values, never decisions.
+
+Two things about the implementation are worth the space.
+
+**Getting the neighbours back.** The whole point of section 1 is that the filtered cost
+volume does not exist, so the two costs the fit needs are gone by the time the winner
+is known. The cost stage now retains a three-wide window around each pixel's *running*
+best — when a new best is set, the previous plane's value is its left neighbour, and
+the next plane's value is its right. That only works if the disparity planes arrive in
+order within a thread, which means the cost stage hands each worker a contiguous range
+of disparities instead of stealing single planes. Sizing those ranges by *work* rather
+than by plane count matters, because a plane's cost is proportional to its valid width
+$$W - 6 - d$$ and shrinks as $$d$$ grows; equal plane counts would leave the low-$$d$$
+worker holding the most.
+
+**It costs 1.30× on the CPU.** The three-wide window and the coarser work quantum both
+land on the cost stage. The first version was 1.53× and I fixed the wrong half of it
+first: double-buffering removed the extra store and barely moved the wall clock,
+because the store was never the constraint — the chunked scheduler was. 16-plane chunks
+at $$D=60$$ is four chunks for six threads, so two threads got nothing and occupancy
+fell from 5.3 of 6 cores to 3.7. That is worth more than the arithmetic it saved.
+
+## 3. Measuring it: the benchmark had to change first
+
+For most of this project the accuracy number came from eight Middlebury 2003/2005
+scenes at 450×375, scored at native resolution. That benchmark is structurally
+incapable of seeing the result in section 2: at a one-pixel threshold on the native
+grid, integer output costs almost nothing. Sub-pixel disparity measured as *slightly
+harmful* there, was recorded as a negative, and sat disabled.
+
+Middlebury v3 is where the field publishes, and its rules differ in a way that matters:
+**the evaluation is always at full resolution, and it upsamples your result to get
+there.** Disparity scales with resolution, so a quarter-resolution result has its
+disparities multiplied by four and its errors with them.
+
+That trap is worth stating precisely, because the first evaluator I wrote fell into it.
+Scoring a quarter-resolution result against quarter-resolution ground truth at bad-1.0
+gives **13.0% where the leaderboard says 37.3%** for the same data — a 2.9× flattery,
+and a completely plausible-looking number. What caught it was scoring Middlebury's own
+published SGM output, which ships with the dataset and has a known row on the public
+table. An evaluator that cannot reproduce a known result is not evidence about
+anything. Mine now reproduces it to 37.33 against 37.3 and refuses to run if it stops.
+
+The metric definitions are transcribed from the benchmark's own `evaldisp.cpp` rather
+than reimplemented, including two details that change the answer: the maximum disparity
+for clipping comes from the *result's* calibration while the integer-rounding flag
+comes from the *ground truth's*, and `bad` counts wrong pixels over all masked pixels
+*including* the ones the matcher left empty. That last one means `bad` is not an error
+rate over answered pixels until you divide by coverage.
+
+## 4. What the matcher produces
+
+All fifteen v3 scenes run, including the two with disparity ranges of 160 and 190.
+These are the eight 2003/2005 scenes, at their native resolution, so the disparity maps
+are directly comparable with the ground truth beside them. Black is "no answer" —
+either no ground truth, or the margin gate declining to commit:
+
+![maps a](/assets/img/2026-08-08-Dense-MASDA_files/maps_a.png)
+![maps b](/assets/img/2026-08-08-Dense-MASDA_files/maps_b.png)
+
+The error column is the interesting one. The residual error is at depth
+discontinuities and in [repetitive texture][gl-ambiguity], which is where Part 1's
+ambiguity analysis predicted every matcher loses — including the exact assignment
+solver. Section 8 measures exactly how much of the total error lives near
+discontinuities, because it turns out to decide whether a whole family of improvements
+is worth building.
+
+## 5. The precision–coverage curve, and reading it against SGM
+
+A matcher with a confidence gate does not have *an* accuracy. It has a curve, and the
+gate picks a point on it. Sweeping the margin gate across the fifteen v3 scenes:
+
+![curve](/assets/img/2026-08-08-Dense-MASDA_files/curve.png)
+
+This is the only fair way to compare against a matcher that answers a different number
+of pixels. Read at matched coverage, **SGM is ahead**. Read at the shipping gate, this
+matcher has the lower error rate but answers ten points fewer pixels. Both readings
+describe the same picture: SGM's curve sits below this one over the range where they
+overlap.
+
+That is a different conclusion from the one the older eight-scene benchmark supports,
+where dense MASDA measures 9.8% bad-1.0 against OpenCV SGM's 10.9%. Both numbers are
+real. The 2003/2005 scenes at native resolution are an easier problem scored at a
+looser tolerance, and the two benchmarks disagree about the ordering. When they
+disagree I take the harder one, but the older number is not wrong — it is answering a
+different question.
+
+Where the coverage goes is worth knowing, because it is not lost:
+
+| sink | coverage cost |
+|---|---|
+| the margin gate | 11.1 points |
+| contention in the one-to-one decode | 0.2 points |
+
+98% of it is the gate, which is a chosen position on the curve. I built the fix for the
+other 0.2 — when a pixel's best candidate points at a right pixel some other pixel
+already claimed, retry its second candidate instead of dropping the pixel — and
+measured coverage 80.1% → 80.3% for error 26.0% → 26.3%. It pays for what it recovers.
+Reverted.
+
+## 6. What the parameters are worth
+
+Every parameter in the matcher, swept on the fifteen v3 scenes at the shipping
+configuration. Some of these had never been measured, and one of them had never been
+measured *at all* despite carrying a comment that implied it had.
+
+**Aggregation reach $$\sigma_s$$ — was set past its optimum.** The comment beside it
+recorded a sweep of the *range* parameter $$\sigma_r$$, and $$\sigma_s$$ had simply
+inherited a value:
+
+| $$\sigma_s$$ | 6 | 8 (now) | 10 | 12 (was) | 20 |
 |---|---|---|---|---|---|
-| OpenCV SGM | 78.0% | 10.9% | 16 ms | not measured | not measured |
-| **dense MASDA** | 76.0% | **9.7%** | 39 ms | 70 ms | 152 ms |
+| bad-1.0 | 24.98 | **25.18** | 25.61 | 26.17 | 28.32 |
+| coverage | 79.9% | 79.6% | 79.3% | 78.9% | 77.8% |
 
-(Runtimes are best-of-6 on Teddy and on a real [D435 IR pair][gl-d435]; the TX2 columns
-are interleaved best-of-6 because that board's run-to-run variance is 37%. SGM's 16 ms is
-OpenCV on the desktop; I have not built OpenCV on the TX2, so those cells are empty
-rather than scaled — scaling desktop numbers to the Jetson is how this project
-once got a figure wrong by 3×.)
+Better on *both* axes at 6–8 than at 12, and free: the filter is an IIR whose cost does
+not depend on $$\sigma$$. Now 8. This is the cheapest 0.9 points in the project and it
+was sitting there because a comment about a neighbouring parameter made the value look
+considered.
 
-Ahead on accuracy by 1.2 points, behind on coverage by 2.0, behind on runtime. The
-accuracy is the part I care about here, because SGM is a strong,
-heavily-engineered baseline and MASDA reaches past it with a *different mechanism*:
-uniqueness plus confidence instead of path-wise smoothness. SGM has no uniqueness
-constraint at all — it needs a [left-right consistency check][gl-lrc] bolted on
-afterwards to get
-to 78% coverage, which is two matcher runs. MASDA gets mutual exclusivity in the
-inference itself, in one run, and produces a calibrated margin as a by-product.
+**The graded cost interacts with the sub-pixel fit, and the benchmarks disagree.** The
+truncated absolute difference blended into the Census score was measured at 10.3% →
+9.7% when it was added:
 
-The maps, all eight scenes — left image, ground truth, and the two variants this post
-compares (section 6). Black is "no answer": either no ground truth, or the margin gate
-declined to commit. Note how closely the two right columns agree; that agreement is
-measured at parity in the tables below.
-
-![teddy](/assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png)
-![cones](/assets/img/2026-08-08-Dense-MASDA_files/maps_cones.png)
-![Art](/assets/img/2026-08-08-Dense-MASDA_files/maps_Art.png)
-![Books](/assets/img/2026-08-08-Dense-MASDA_files/maps_Books.png)
-![Dolls](/assets/img/2026-08-08-Dense-MASDA_files/maps_Dolls.png)
-![Laundry](/assets/img/2026-08-08-Dense-MASDA_files/maps_Laundry.png)
-![Moebius](/assets/img/2026-08-08-Dense-MASDA_files/maps_Moebius.png)
-![Reindeer](/assets/img/2026-08-08-Dense-MASDA_files/maps_Reindeer.png)
-
-Where the residual error lives — absolute error against ground truth on Teddy, for both
-variants. The error is at depth discontinuities and in the
-[repetitive-texture][gl-ambiguity] regions,
-which is exactly where Part 1's ambiguity analysis predicted every matcher, including
-the exact solver, loses precision:
-
-![teddy error](/assets/img/2026-08-08-Dense-MASDA_files/err_teddy.png)
-
-## 4. The speed work, and the discipline it forced
-
-The desktop journey was 246 → 39 ms across roughly twenty measured changes (29 with the coarse-to-fine mask of section 6). I will not
-walk through all of them; the ones worth a paragraph each are the ones that generalise.
-
-**The volume removal** (section 2): 1.9×, and the largest single step.
-
-**int16 through the score, filter and top-2.** The score is $$(24 - \text{hamming})/24$$
-in $$[-1, 1]$$, which maps exactly onto [Q14 fixed point][gl-q14] with headroom. Measured:
-**neutral on the desktop, 20% on the Jetson** — half the [lanes][gl-lanes], half the
-bandwidth, and
-[NEON][gl-neon] is 128-bit against AVX2's 256. This number pair is the whole argument for
-measuring
-on the target: the desktop said "don't bother", the target said "20%".
-
-**[Centre-symmetric census][gl-census]** (24-bit descriptors): worthless on the desktop,
-10% on the
-TX2, and it costs 1.2 points of bad-1.0 — a knob with a price tag on each side, recorded
-and left off.
-
-**A [NEON][gl-neon] kernel with disparity in the [vector lanes][gl-lanes].** The score
-loop was the largest
-single item and its scalar [popcount][gl-hamming] looked like the reason. The first
-attempt vectorised
-eight *pixels'* popcounts and bought nothing: the table lookups next to the popcount
-stayed per-pixel gathers and took over the loop. The literature
-([ReS2tAC, Ruf et al.][gl-res2tac])
-puts *disparity* in the lanes instead — then the eight Hamming distances land in one
-register and NEON's `vqtbl4q_u8` turns both lookup tables into vector operations. Built,
-[bit-identical][gl-bitid] to the scalar loop, **1.59× on the score loop — and 0.92× on
-the stage**,
-because the eight-disparity work quantum costs more scheduler occupancy than the kernel
-saves. It is in the tree behind a flag, off by default. A 1.6× on 30% of a stage is an
-11% ceiling, and I had ranked it first by item size. Ranking by size × achievable ÷
-collateral is the correction.
-
-**The measurement discipline itself earned its keep.** Three rules, each paid for:
-
-1. *The desktop is not a proxy for the TX2*, in either direction (int16, csct above).
-2. *TX2 variance is 37%* at locked clocks and stable temperature —
-   [four A57s and two Denvers][gl-cores] being scheduled differently run to run.
-   Everything is [interleaved best-of-N][gl-bestofn].
-3. *`cmp` between two multi-threaded runs is not an identity check.* Two identical runs
-   differ in a handful of pixels because the top-2 insert keeps the first of two equal
-   scores and work is handed out dynamically. Bit-identity is checked single-threaded;
-   accuracy is checked with the benchmark. An earlier experiment was part-reverted on
-   identity evidence that this rule retroactively voids.
-
-## 5. Five wrong guesses about occupancy, then the instrument
-
-At 848×480 — the camera's real resolution, 2.4× the pixels of the Middlebury scenes —
-the TX2 measured **200 ms**, and the cost stage's CPU-to-wall ratio said "3.85 of 6
-cores busy". I now know that number was misread, and the misreading cost three built-
-and-reverted "fixes" earlier in this project and two more mechanism guesses this week
-(an L2 working-set story and a load-imbalance story, both measured false).
-
-The instrument that settled it: per-thread *span* (time the thread existed) printed next
-to per-thread *busy* (sum of its in-loop timers). Result: **5.99 of 6 busy while
-alive**. The workers were saturated; the missing time was *outside* the pool — a serial
-prologue (allocation, coefficient computation) and a serial-ish merge pass between the
-cost pool and the solve pool. [Amdahl][gl-amdahl], not scheduling.
-
-Three fixes, measured together at **1.22×** (193 → 158 ms end-to-end, interleaved
-best-of-6):
-
-- **The merge fused into the solve.** The per-pixel 2-of-2n candidate selection was a
-  separate threaded pass writing 8 MB of merged arrays that only the solver read. Done
-  row-by-row inside the solver instead, the candidates land hot in the 28 KB the row
-  solve reads anyway, and the pass, the arrays and their serial zero-fill all vanish.
-- **The filter coefficients become a 512-byte table.** Two `exp()` per pixel, ~700k
-  transcendentals — but the input is the difference of two bytes, which has 256 values.
-- **A dead normalisation removed.** 407k float divisions for a buffer the shipping
-  path never reads.
-
-The general lesson I keep relearning on this project: **when two mechanism guesses fail
-on the same code, stop guessing and add the instrument.** Every timer added this week
-found money somewhere no story had pointed.
-
-## 6. Removing the D-plane sweep: 5.2× of arithmetic, 1.0× of runtime
-
-This is the comparison this post exists for: the full sweep (score all $$D$$ disparity
-planes) against a [coarse-to-fine][gl-c2f] variant that only scores planes where a
-half-resolution prior says the answer might be.
-
-**The idea has a measured ceiling.** Run the matcher at half resolution (a quarter of
-the pixels, half the disparities — an eighth of the work), upsample, and search only
-$$\pm 2$$ around the coarse answer: if the truth is outside that band, no refinement can
-recover it. Measured on ground truth, **81.5% of known pixels keep the truth in-band**,
-against 67.9% [correct-over-known][gl-metrics] delivered by the full sweep — headroom, at
-5.2× less
-arithmetic. Every fast published CPU matcher lives on some version of this:
-[ELAS][gl-elas]
-narrows the search around triangulated support points,
-[PatchMatch][gl-patchmatch] propagates hypotheses
-instead of sweeping, [rSGM][gl-rsgm] subsamples the far disparities.
-
-**The first construction failed, and the mechanism matters.** I indexed the fine-level
-planes by *offset from the prior*, so the filter aggregated pixels whose absolute
-disparities differ wherever the prior slopes — which is everywhere, and wildly at every
-depth discontinuity. [Aggregation][gl-agg] is worth 16 points of bad-1.0 here, and this
-broke it:
-4 points worse *at every band width up to ±30*, where the band covers the whole range
-and the only remaining difference is the indexing. A quantity that does not move when
-its supposed cause is varied sevenfold is not a tuning problem.
-
-**The second construction keeps the planes absolute** and uses the prior only as a
-*mask*: plane $$d$$ is scored on the rows whose per-row interval wants it, filtered
-over the plane's bounding rectangle (a rectangular variant of the recursive filter),
-and inserted strictly inside the interval — so a wrong prior costs candidates, never
-wrong values.
-
-Accuracy, eight scenes, pixel-pooled:
-
-| | coverage | bad-1.0 | correct-over-known |
-|---|---|---|---|
-| full sweep | 76.0% | 9.5% | 68.8% |
-| **coarse-to-fine mask** | 76.7% | 10.5% | 68.6% |
-
-Parity, and the maps above show the agreement. The loss concentrates where you would
-predict: thin structures (Art: 12.7 → 14.9) that vanish at half resolution, so the
-prior never proposes them.
-
-Runtime, both machines, both resolutions, same binary and flags. The desktop is a
-4-core x86 at best-of-6; the TX2 is six cores at 2.03 GHz, interleaved best-of-6:
-
-| | desktop | TX2 | TX2 / desktop |
-|---|---|---|---|
-| 450×375, full sweep | 39 ms | 70 ms | 1.8× |
-| 450×375, coarse-to-fine | **29 ms** | 71 ms | 2.5× |
-| 848×480, full sweep | 90 ms | 152 ms | 1.7× |
-| 848×480, coarse-to-fine | **77 ms** | 155 ms | 2.0× |
-
-**A 1.2–1.4× win on the desktop and *flat* on the TX2 — at both resolutions.** The same
-change, measured on two machines, has a different sign. This is the third time this
-project's desktop has predicted the wrong outcome for the target (int16 was neutral
-there and worth 20% on the TX2; centre-symmetric census was worthless there and worth
-10% on the TX2; now the mask, in the opposite direction), and it is why every number in
-this post says which machine it came from.
-
-Where the platforms actually disagree — per stage, at 848×480, representative runs:
-
-| stage | desktop, full | TX2, full | desktop, c2f | TX2, c2f |
+| `--ad` | 0 | 0.08 | 0.15 (ships) | 0.25 |
 |---|---|---|---|---|
-| census | 5 ms | 10–14 | 5 | 8–12 |
-| cost (score + filter + insert) | 72–90 | 104–110 | 54 | 64 |
-| **solve (MASDA + merge)** | **12** | **33–48** | **11** | **46–50** |
-| coarse level, whole | — | — | 17 | 43 |
+| bad-1.0 (v3) | **24.42** | 24.68 | 25.18 | 26.13 |
 
-The cost stage — the arithmetic — is only ~1.4× apart between the machines. **The solve
-is ~4× apart**, because it is not arithmetic: it is the fused candidate merge streaming
-the per-thread top-2 planes, 19.5 MB per pass at this resolution, and memory streams are
-where the TX2 is weakest relative to a desktop. So the two machines disagree about which
-stage is expensive. The desktop's frame is dominated by the cost stage, which the mask
-shrinks; the TX2's is increasingly dominated by the solve and the fixed coarse level,
-which the mask cannot touch. Same code, different bottleneck, opposite verdict. The 5.2× of arithmetic is real —
-the fine score loop genuinely shrinks by the band fraction — and three costs ate it:
+On v3 it now measures the other way — and the entire effect is the fit. With sub-pixel
+disabled, `ad 0` gives 42.00 and `ad 0.15` gives 42.04, which is nothing. The truncated
+difference saturates and is piecewise linear, so blending it into the cost changes the
+*shape* near the minimum. An argmax does not care about shape; a parabola through three
+samples cares about very little else. On the older eight-scene benchmark, scored at
+native resolution where the fit's quality is invisible, the graded cost still helps —
+9.8% against 10.3%, and better coverage. It stays on, because that is the resolution
+and tolerance the camera actually operates at, and the interaction is recorded rather
+than tuned away. The change that would win on both is to fit on the Census term alone
+while still selecting on the graded cost, which costs a second filtered plane.
 
-1. **Background planes have full-width rectangles.** A disparity visible both left and
-   right of a foreground object gets a bounding box spanning the row, so the fill and
-   the filter still touch nearly the whole image for most planes. Arithmetic scales
-   with the band; *rectangles* do not.
-2. **The solver does not scale with $$D$$ at all.** Its cost is per-pixel, it is ~4×
-   more expensive on the TX2 than on the desktop (the stage table above), and at ~47 ms
-   it is now the largest single item on the board — [bandwidth, not
-arithmetic][gl-bandwidth]. The mask cannot touch it.
-3. **The coarse level is a fixed 43 ms on the TX2** (17 on the desktop), almost exactly
-   what the mask saves from the fine cost stage there.
+**$$\lambda$$ and $$\gamma$$ do nothing where they are set.** These are MASDA's clutter
+and misdetection costs — the price of leaving a left pixel unmatched and a right pixel
+unclaimed:
 
-Two sub-experiments inside this construction are worth recording because they are
-*about MASDA*, not about stereo:
-
-- **A second search band around the coarse level's runner-up candidate** — MASDA
-  exports its second-best per pixel, and at thin structures the runner-up is often the
-  missing surface. Measured: *worse everywhere* (pooled 10.6 → 11.2). Where the coarse
-  level is ambiguous, its runner-up is the wrong period of a
-  [repetitive texture][gl-ambiguity], and a
-  band around it hands the fine solver a wrong surface it can aggregate into a
-  confident answer.
-- **A strict per-pixel band-membership test at insert time** — the "principled" version
-  of the mask. Measured: *a full point worse* (10.6 → 11.6). The row-interval slack
-  admits candidates a pixel's own band would exclude, and they help.
-
-Part 1 measured the same thing from the other side: exact per-row assignment is no
-more precise than MASDA on identical candidates (0.914 against 0.915 on Teddy), so
-the inference is not what bounds the result — the candidate set is. Both arrows here point the same way: what you
-offer the solver matters more than how cleverly you restrict it.
-
-## 7. Where this leaves it
-
-Where real-time on the TX2 stands, at the camera's 848×480:
-
-| milestone | desktop 848×480 | TX2 848×480 | TX2 vs 30 Hz budget |
+| $$\lambda = \gamma$$ | −0.4 | **−0.1 (ships)** | +0.3 |
 |---|---|---|---|
-| measured at target resolution | — | 200 ms | 6.0× over |
-| Amdahl fixes | 90 ms | **152 ms** | 4.6× over |
-| coarse-to-fine mask | **77 ms** | 155 ms | flat |
+| bad-1.0 | 25.18 | 25.18 | 22.02 |
+| coverage | 79.6% | 79.6% | 73.4% |
 
-(The Amdahl fixes also carried down to the smaller resolution: Teddy on the TX2 went
-from ~89 ms to ~70 over the same changes, none of which were aimed at it.)
+Below zero they are not merely flat — a factor of four in magnitude produces a
+**byte-identical** disparity map. They sit far below the score distribution, so the rejection they implement
+almost never fires. Above zero they work — and what they do is trade coverage for
+precision at roughly the same exchange rate as the margin gate, which is to say they
+are a second gate rather than a second mechanism.
 
-Dense MASDA on this CPU is a 6 Hz matcher today, or ~15 Hz at half resolution. The
-solver itself — the part that is MASDA — is 47 of those milliseconds and is bound by
-memory streaming, not by message-passing arithmetic; the identified next step on the
-CPU is a row-stripe parallelisation that deletes the merge outright, at the price of
-truncating the vertical filter at stripe boundaries. That is a measurable quality
-question, and it is queued behind a bigger one.
+## 7. The ablation: the message passing is not what makes this work
 
-**The bigger one is the GPU.** The TX2's GPU sits at load zero through all of this, and
-every structural property that made the CPU implementation fast — independent disparity
-planes, independent rows, a solver that is two [strided reductions][gl-segred] — is a
-description of
-a CUDA kernel. ReS2tAC runs SGM in real time on exactly this class of hardware; dense
-MASDA has strictly more parallel structure than SGM, plus a property SGM lacks: it
-already knows how confident it is. That is the next post.
+The matcher is named after an inference algorithm, so the obvious question is what that
+inference contributes. Disabling the message passing leaves everything else in place —
+the candidate set, the one-to-one decode, the margin, the gate — and decides by score
+alone, which is [winner-take-all][gl-wta] under a uniqueness constraint:
 
-The measurement discipline is the part I would keep even if the matcher were thrown
-away. Five occupancy hypotheses were wrong before an instrument was right; the desktop
-predicted the wrong sign for the target twice; the "obviously correct" 5.2× became
-1.0× for reasons no amount of reading the code would have produced. Roughly half of
-what shipped came from an experiment that first said something I did not expect —
-which is, I think, the definition of an experiment worth running.
+| iterations | K = 2 (ships) | | K = 8 | |
+|---|---|---|---|---|
+| | bad-1.0 | coverage | bad-1.0 | coverage |
+| **0 — winner-take-all (ships)** | **25.18** | 79.6% | **24.41** | 79.8% |
+| 1 | 26.13 | 79.6% | — | — |
+| 2 | 26.04 | 80.1% | 25.58 | 80.6% |
+| 4 | 26.19 | 80.2% | 25.78 | 81.0% |
+
+**The message passing buys coverage and pays for it in precision**, at about the same
+exchange rate as the gate and $$\lambda/\gamma$$. It is a third knob along the same
+curve. And it is not free: on the TX2 the solve is 13.0 ms without it against 25.5 ms
+with it, so roughly twelve milliseconds of CPU at the camera's resolution.
+
+Getting this measurement right required fixing the ablation first. With no messages the
+max-sum belief $$\beta + \rho - s$$ degenerates to *minus* the score, so the solver
+picked the **worst** candidate and the configuration read 67.3% — which looks exactly
+like proof that message passing is worth forty points. It is not an ablation, it is an
+inverted objective, and it would have been an easy number to publish.
+
+What this does *not* say is that MASDA is doing nothing. The parts that survive the
+ablation are the parts that distinguish this from a block matcher: the one-to-one
+constraint, which SGM does not have at all and needs a [left-right consistency
+check][gl-lrc] bolted on to approximate, and the margin, which is what a downstream
+consumer gates on. Both are present in every row of that table. What is in question is
+the loopy belief propagation on top of a *two-candidate* set, which is the case where
+it has the least to decide. The sparse matcher's advantage in Part 1 was measured with
+many candidates on deliberately ambiguous projected-dot texture, and temporal
+association — where the candidate set is genuinely large and two-dimensional — has not
+been tested. Message passing is off by default in the dense path and one flag away.
+
+## 8. What did not work, and why
+
+Four families of improvement were measured and declined. Each was priced before it was
+built, which is the only reason the list is short.
+
+**Restricting the disparity range — 5.2× on paper, 1.9× in practice.** Every fast
+published CPU matcher avoids the exhaustive sweep: [ELAS][gl-elas] triangulates support
+points, [PatchMatch][gl-patchmatch] propagates hypotheses, [rSGM][gl-rsgm] subsamples.
+The ceiling is real — if each 16×16 tile knew which disparities its pixels needed, it
+would compute 19.2% of the sweep. Three things ate it:
+
+1. *Per-pixel restriction is illegal here.* The filter aggregates over a plane, so a
+   plane must hold one constant disparity. Restriction has to be per-tile, so that
+   every pixel in a tile sweeps the same set.
+2. *The best available predictor is not accurate enough.* A half-resolution pass
+   predicts tile ranges at 20.9% of the sweep — essentially at the oracle's cost — but
+   with 90.7% recall, meaning one true disparity in eleven falls outside its tile's
+   band. Reaching a usable recall costs most of the saving.
+3. *The aggregation has to be fed.* A tile can only skip a plane if it also skips it
+   for the pixels the filter reads, and the filter reaches ~16 px. A 16×16 tile wanting
+   one plane costs a 48×48 patch of it. That takes 26.3% to 53.8%.
+
+[Intrinsic curves][gl-icsg] deserve a separate mention because they reproduce their
+paper exactly and still do not help. The construction admits 13.9% of the disparity
+range per pixel — an 86% reduction, right at the published claim. But the admitted
+disparities of *neighbouring pixels do not agree*: the union over even a 4×4 tile is
+43.6% of the range. A reduction that is per-pixel and spatially incoherent is unusable
+by a matcher that aggregates over planes, and usable by one that scores candidates
+individually — which is what that paper's own SGM does.
+
+**Better edge-aware support — the target is real, the mechanism is not.** Pixels within
+8 px of a depth discontinuity are 18.3% of the image and carry 28.6% of all error, at
+57.1% against a 32.0% far-field rate. That is a 4.6-point target. But two independent
+knobs that should move it do not: a fourfold range of the filter's edge sensitivity
+leaves near-edge error at 57.1–57.8%, and handing the solver the *entire* disparity
+range instead of two candidates leaves it at 56.4%. What remains is half-occlusion —
+beside a foreground edge, part of the support has no correspondence in the other image
+at all, and no weighting scheme fixes neighbours that are not visible. The aggregation
+here is already edge-aware; making it more or less so does not touch the pixels it was
+supposed to help.
+
+**A second search band around the coarse level's runner-up.** MASDA exports its
+second-best candidate, and at thin structures the runner-up is often the surface the
+best candidate missed. Measured: worse everywhere. Where the coarse level is ambiguous
+its runner-up is the wrong period of a repetitive texture, and a band around it hands
+the fine solver a wrong surface it can aggregate into a confident answer.
+
+**A strict per-pixel band-membership test at insert time** — the principled version of
+a masked search. Measured a full point worse. The row-interval slack admits candidates
+a pixel's own band would exclude, and they help.
+
+The last two point the same way as Part 1's central result: exact per-row assignment is
+no more precise than MASDA on identical candidates, so the inference is not what bounds
+the outcome. **The candidate set is.** What you offer the solver matters more than how
+cleverly you restrict it, and both of these experiments restricted it cleverly.
+
+## 9. Where this leaves the CPU implementation
+
+At the camera's 848×480 the CPU matcher is a 5 Hz matcher, and the solve — the part
+that is MASDA — is memory-bound rather than arithmetic-bound. Two structural properties
+say where it goes next, and neither is a CPU optimisation: disparity planes are
+independent, rows are independent, and the solver is two [strided
+reductions][gl-segred]. That is a description of a CUDA kernel, and the TX2's GPU sits
+at load zero through everything above.
+
+[Part 3][p3] is that port: the image plane moves to the GPU, the CPU keeps the graph,
+and the matcher runs at **31.7 ms per frame at 848×480**, bit-identical to this
+implementation on all eight ground-truth scenes.
+
+The methodological part is worth keeping even if the matcher were thrown away. Three
+rules, each paid for:
+
+1. **The desktop is not a proxy for the target, in either direction.** int16 arithmetic
+   was neutral on the desktop and worth 20% on the Jetson; a 24-bit descriptor was
+   worthless on the desktop and worth 10% on the Jetson; a coarse-to-fine mask was
+   worth 1.24× on the desktop and flat on the Jetson.
+2. **The benchmark decides what you can see.** Sub-pixel disparity was a recorded
+   negative for months because the benchmark in use could not resolve it.
+3. **Check that a default change is live before measuring it.** A header was listed as
+   a prerequisite in one build rule and not the other, so a header-only change relinked
+   nothing, `make` printed success, and a fifteen-scene benchmark measured the old
+   value and reported it as the new one. What caught it was the result coming back
+   *exactly* equal to the previous figure. A slightly different one would have been
+   believed.
 
 ---
 
-*The matcher is `de_dense.cpp` in the project's `core/`, plain C++14 with no
-dependencies; the benchmark regenerates every number in this post from the Middlebury
-scenes with one command. Part 1, with the derivation of the message equations, the
-$$\lambda$$/$$\gamma$$ semantics and the sparse results, is
-[here](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/).*
+*The matcher is `de_dense.cpp`, plain C++14 with no dependencies. Every figure in this
+post is regenerated from the shipping binary by one script, and every number by one
+benchmark command against Middlebury ground truth.*
 
 **References**
 
-Full citations with DOIs, along with every term this post uses, are in the
+Full citations with DOIs, and every term this post uses, are in the
 [series glossary][gl-appendix].
 
 - [Geiger, Roser, Urtasun, *Efficient Large-Scale Stereo Matching*][gl-elas] (ELAS),
-  ACCV 2010 — support points + triangulated prior, the canonical "don't sweep" CPU
+  ACCV 2010 — support points and a triangulated prior; the canonical "don't sweep" CPU
   matcher.
 - [Bleyer, Rhemann, Rother, *PatchMatch Stereo*][gl-patchmatch], BMVC 2011 — hypothesis
-  propagation instead of a sweep; slanted support windows.
-- [Spangenberg et al., *Large Scale Semi-Global Matching on the CPU*][gl-rsgm], IV 2014 —
-  VGA×128 disparities above 16 Hz on a CPU; disparity subsampling.
-- [Ruf et al., *ReS2tAC — UAV-Borne Real-Time SGM Stereo Optimized for Embedded ARM and
-  CUDA Devices*][gl-res2tac], Sensors 21(11), 2021 — the disparity-in-the-lanes NEON
-  formulation and the embedded CUDA baseline.
-- [Nover, Achar, Goldman, *ESPReSSo: Efficient Slanted PatchMatch for Real-Time Spacetime
-  Stereo*][gl-espresso], 3DV 2018 — edge-aware aggregation under shared plane hypotheses.
+  propagation instead of a sweep, and slanted support windows.
+- [Spangenberg et al., *Large Scale Semi-Global Matching on the CPU*][gl-rsgm], IV 2014.
+- [Ruf et al., *ReS2tAC*][gl-res2tac], Sensors 21(11), 2021 — the
+  disparity-in-the-lanes formulation, and the embedded CUDA baseline Part 3 measures
+  against.
+- [Nover, Achar, Goldman, *ESPReSSo*][gl-espresso], 3DV 2018 — edge-aware aggregation
+  under shared plane hypotheses; the one remaining candidate for range restriction that
+  produces tile-constant hypotheses by construction.
+- [Shahbazi et al., *Revisiting intrinsic curves for efficient dense stereo
+  matching*][gl-icsg], ISPRS 2016 — the per-pixel range reduction measured in section 8.
 
+[p1]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/
+[p3]: https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/
 [gl-appendix]: https://www.mariolueder.com/masda-glossary/
 [gl-masda]: https://www.mariolueder.com/masda-glossary/#masda
 [gl-maxsum]: https://www.mariolueder.com/masda-glossary/#max-sum-max-product-and-sum-product
 [gl-lbp]: https://www.mariolueder.com/masda-glossary/#loopy-belief-propagation
 [gl-assoc]: https://www.mariolueder.com/masda-glossary/#data-association
-[gl-factorgraph]: https://www.mariolueder.com/masda-glossary/#factor-graph
 [gl-messages]: https://www.mariolueder.com/masda-glossary/#messages-responsibility-and-availability
-[gl-damping]: https://www.mariolueder.com/masda-glossary/#damping
 [gl-clutter]: https://www.mariolueder.com/masda-glossary/#clutter-and-misdetection
 [gl-one2one]: https://www.mariolueder.com/masda-glossary/#one-to-one-constraint
 [gl-margin]: https://www.mariolueder.com/masda-glossary/#margin-and-the-margin-gate
@@ -458,29 +427,20 @@ Full citations with DOIs, along with every term this post uses, are in the
 [gl-disparity]: https://www.mariolueder.com/masda-glossary/#disparity
 [gl-costvolume]: https://www.mariolueder.com/masda-glossary/#cost-volume
 [gl-census]: https://www.mariolueder.com/masda-glossary/#census-transform
-[gl-hamming]: https://www.mariolueder.com/masda-glossary/#hamming-distance-and-popcount
 [gl-tad]: https://www.mariolueder.com/masda-glossary/#truncated-absolute-difference
 [gl-agg]: https://www.mariolueder.com/masda-glossary/#cost-aggregation
 [gl-rf]: https://www.mariolueder.com/masda-glossary/#edge-aware-recursive-filter
-[gl-smooth]: https://www.mariolueder.com/masda-glossary/#smoothness-prior
 [gl-sgm]: https://www.mariolueder.com/masda-glossary/#semi-global-matching
 [gl-lrc]: https://www.mariolueder.com/masda-glossary/#left-right-consistency-check
-[gl-c2f]: https://www.mariolueder.com/masda-glossary/#coarse-to-fine
+[gl-wta]: https://www.mariolueder.com/masda-glossary/#winner-take-all
+[gl-subpix]: https://www.mariolueder.com/masda-glossary/#sub-pixel-disparity
 [gl-ambiguity]: https://www.mariolueder.com/masda-glossary/#repetitive-texture-and-ambiguity
 [gl-middlebury]: https://www.mariolueder.com/masda-glossary/#middlebury-stereo-datasets
 [gl-metrics]: https://www.mariolueder.com/masda-glossary/#coverage-precision-and-the-bad-pixel-rate
-[gl-bestofn]: https://www.mariolueder.com/masda-glossary/#interleaved-best-of-n
 [gl-elas]: https://www.mariolueder.com/masda-glossary/#elas
 [gl-patchmatch]: https://www.mariolueder.com/masda-glossary/#patchmatch-stereo
 [gl-rsgm]: https://www.mariolueder.com/masda-glossary/#rsgm
 [gl-res2tac]: https://www.mariolueder.com/masda-glossary/#res2tac
 [gl-espresso]: https://www.mariolueder.com/masda-glossary/#espresso
+[gl-icsg]: https://www.mariolueder.com/masda-glossary/#intrinsic-curves
 [gl-tx2]: https://www.mariolueder.com/masda-glossary/#jetson-tx2
-[gl-cores]: https://www.mariolueder.com/masda-glossary/#a57-and-denver-cores
-[gl-d435]: https://www.mariolueder.com/masda-glossary/#realsense-d435-and-the-ir-pair
-[gl-neon]: https://www.mariolueder.com/masda-glossary/#neon-and-simd
-[gl-lanes]: https://www.mariolueder.com/masda-glossary/#vector-lanes
-[gl-q14]: https://www.mariolueder.com/masda-glossary/#q14-fixed-point
-[gl-bandwidth]: https://www.mariolueder.com/masda-glossary/#bandwidth-bound
-[gl-amdahl]: https://www.mariolueder.com/masda-glossary/#amdahls-law
-[gl-bitid]: https://www.mariolueder.com/masda-glossary/#bit-identity
