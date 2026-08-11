@@ -273,7 +273,8 @@ what Bayati, Shah and
 Sharma require for [max-product](/masda-glossary/#max-sum-max-product-and-sum-product) to be
 correct on bipartite matching. So the
 degenerate case is not an edge case to patch around; it is where the guarantee
-stops. Section 4 measures how often that happens on dense rows, and it is often.
+stops. [Section 4](#4-results-against-ground-truth) measures how often that happens on
+dense rows, and it is often.
 
 > Bayati, M., Shah, D., & Sharma, M. (2008). *Max-Product for Maximum Weight
 > Matching: Convergence, Correctness, and LP Duality.* IEEE Transactions on
@@ -337,8 +338,8 @@ def masda_sparse(ei, ej, se, m, n, lam=-0.1, gam=-0.1, iters=30, damping=0.4):
 ```
 
 Same messages, same damping, same belief, same decision rule as the dense-matrix
-version. Only the representation differs — and section 5 shows that difference is
-a factor of 62 on this problem, before any compiled code.
+version. Only the representation differs — and [section 5](#5-speed-the-representation-decides-it)
+shows that difference is a factor of 62 on this problem, before any compiled code.
 
 A note on [damping](/masda-glossary/#damping): undamped max-sum on heavily tied problems does not
 settle; the
@@ -393,7 +394,7 @@ measurements that share no code agree on the shape.
 What the messages do earn is visible in the next two sections: they get closer to
 the exact assignment objective, and they do it while remaining an approximation.
 The objective is simply not the quantity a consumer experiences — which is the
-finding of section 4.2, arriving early.
+finding of [section 4.2](#42-against-the-exact-optimum), arriving early.
 
 Per scene, WTA against MASDA:
 
@@ -526,7 +527,8 @@ The actual claim, then: MASDA's cost is linear in the number of *plausible*
 associations, and the aggregated volume plus geometry cuts a $$W \times W$$ row
 problem to two candidates per pixel. Only a representation that exploits that
 sees any benefit. This also reframes the comparison with an exact solver: it is
-not about accuracy — section 4.2 shows JV is exactly as good — it is that MASDA
+not about accuracy — [section 4.2](#42-against-the-exact-optimum) shows JV is exactly
+as good — it is that MASDA
 is [anytime](/masda-glossary/#convergence-and-the-anytime-property), incremental, and accepts
 factors that destroy the assignment
 structure, where a [LAP solver](/masda-glossary/#linear-assignment-problem) cannot follow.
@@ -723,10 +725,15 @@ Where it is not:
 - The correctness guarantee is conditional and the condition fails routinely on
   dense rows — half the rows here have non-unique LP optima. In practice that
   cost under 0.1% of objective and no measurable precision, but nothing in the
-  theory promised it, and section 4.2 is the record.
+  theory promised it, and [section 4.2](#42-against-the-exact-optimum) is the record.
 - It cannot create information. Where the aggregated evidence is degenerate it
   produces confident wrong answers; the margin gate exists to convert those back
-  into abstentions, at the price of coverage.
+  into abstentions, at the price of coverage. **The gate has a blind spot of its
+  own**, and it is structural rather than a tuning failure: best-minus-second is
+  only defined over the candidates that were searched. Where the true match lies
+  outside the disparity range, or off the edge of the other image, the winner has
+  no real competitor and the margin is therefore *large*. A confidence read from
+  the cost curve cannot see the case where the answer was never on the curve.
 - $$\lambda$$ and $$\gamma$$ are hand-set. The scale here is interpretable, which
   helps, but that is not the same as calibrated.
 
@@ -735,14 +742,15 @@ Where it is not:
 ## 9. What would improve it
 
 **Better scores.** $$s(i,j)$$, $$\lambda$$ and $$\gamma$$ remain the weakest part.
-Everything in section 4 says the constraint machinery extracts what the evidence
+Everything in [section 4](#4-results-against-ground-truth) says the constraint
+machinery extracts what the evidence
 contains — MASDA equals exact inference — so the shortfall is in the evidence. A
 small model trained against ground truth to output a calibrated log-likelihood
 ratio would change these numbers more than any refinement of the message passing.
 
 **A [smoothness factor](/masda-glossary/#smoothness-prior), done properly.** (Ordering is now
-measured rather than
-open — section 6 — and the interesting question it leaves is whether a
+measured rather than open — [section 6](#6-can-masda-express-the-ordering-constraint) —
+and the interesting question it leaves is whether a
 neighbourhood factor pays where ordering did not.) Neighbouring pixels on the same surface
 have similar disparity, and the current factor graph ignores it. The cheap
 variants are measured negatives (Part 2's record); the real derivation — path
@@ -755,6 +763,15 @@ to half a pixel before any matching error. A parabola through the aggregated cos
 the winner and its two neighbours took the engineered matcher from 41.5% to 24.5%
 bad-1.0 at unchanged coverage. [Part 2][p2] has the construction and the reason it
 went unmeasured for so long: the benchmark in use could not resolve it.
+
+**A calibrated per-point confidence.** The margin orders points by how much they can
+be trusted; it does not say what a given value *means*. Fusing depth over time, or into
+an occupancy grid, needs the second thing — an existence probability, where 0.8 is
+right 80% of the time. That is a different exercise from ranking: it is measuring the
+empirical error rate in each score bin against ground truth and fitting the mapping,
+then checking the fit survives the move from a dataset to this camera. The literature
+on stereo confidence measures ranks them by area under the sparsification curve, which
+answers the ordering question and stops there.
 
 **Temporal factors.** The same machinery for frame-to-frame association, where
 the previous frame's solution is a prior. A first prototype (frame $$t$$'s

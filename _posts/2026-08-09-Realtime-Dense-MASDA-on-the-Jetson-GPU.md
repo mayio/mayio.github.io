@@ -54,58 +54,33 @@ The two halves of the matcher differ in kind:
 
 Making the solve a GPU kernel would be work spent making the architecture uniform, not
 work spent making the system faster. So the interface is **two scored disparity
-candidates per pixel** — 8 MB per frame instead of a 49 MB [cost volume][gl-costvolume].
+candidates per pixel** — 8 MB per frame instead of the 52 MB int16 [cost
+volume][gl-costvolume].
 The GPU reduces; the CPU decides.
 
-```
-   GPU (256-core Pascal)                     CPU (4× A57, pinned)
-  ┌────────────────────────────────┐        ┌──────────────────────────┐
-  │ census L,R    (48 bits/px)     │        │  MASDA row decode        │
-  │ filter coeffs (LUT per px)     │        │  one-to-one greedy claim │
-  │ graded cost   (Census + AD)    │        │  margin gate             │
-  │ edge-aware recursive filter    │        │  sub-pixel parabola fit  │
-  │ running top-2 per pixel        │        │                          │
-  └───────────────┬────────────────┘        └────────────▲─────────────┘
-                  │  2 × (score, d) + count + 2 neighbours per pixel
-                  └──────────────  8 MB / frame  ────────┘
-```
+![split](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/split.png)
 
 One Tegra-specific trap lives on that arrow and cost 300 ms twice before I believed it:
 **the TX2 has no I/O coherency, so every flavour of [`cudaHostAlloc`][gl-pinned] memory
 — including the one the documentation's mental model calls "cached pinned" — is
 uncached on the CPU side.** A solver reading candidates from such memory runs about
 seven times slower than from ordinary pageable memory. The candidates travel through a
-staged `cudaMemcpy` into a plain `std::vector`, and section 3 shows where that copy
-hides.
+staged `cudaMemcpy` into a plain `std::vector`, and [the pipeline](#3-the-pipeline-and-where-detection-hides)
+is where that copy hides.
 
 ## 2. Dataflow: five kernels, two of which are fusions
 
-Per frame, in stream order, with measured kernel times at 848×480:
+Per frame, in stream order, with measured kernel minima at 848×480, $$D=64$$:
 
-```
- frame ──► upload L,R                                        (~1 ms)
-        ──► k_census        L,R → 48-bit descriptors          (1.5 ms
-        ──► k_rf_coeffs     |∇I| → filter coefficients          with coeffs)
-        ──► k_score_hfwd    census → score → horizontal        (8.8 ms)
-        │                   FORWARD filter pass, FUSED:
-        │                   the raw score never touches DRAM
-        ──► k_hbwd          horizontal backward pass           (5.0 ms)
-        ──► k_vert_fwd      vertical forward pass              (3.3 ms)
-        ──► k_vert_bwd_top2 vertical backward pass with the    (7.4 ms)
-        │                   TOP-2 FUSED in as a warp
-        │                   reduction; its own stores are
-        │                   deleted — nothing reads them
-        ──► fetch           candidates → cached host memory    (hidden, §3)
-        ──► CPU decode      480 independent rows on 4 A57s     (11 ms, parallel)
-```
+![dataflow](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/dataflow.png)
 
 The two fusions are where most of the speed lives, and they follow one principle:
 
 > **A pass that stores exactly what the next pass reads is a fusion candidate. A store
 > that nothing reads afterwards is a bug you are paying for.**
 
-The first port scored the volume (write 47 MB), read it back to filter (94 MB), wrote
-it filtered, then read it again for the top-2. The shipping version computes the score
+The first port scored the volume (52 MB written), read it back to filter (52 in, 52
+out), wrote it filtered, then read it again for the top-2. The shipping version computes the score
 *inside* the first filter pass and consumes the volume *inside* the last one. The
 scored-but-unfiltered volume never makes a round trip and the fully-filtered volume is
 never materialised at all. What remains in DRAM is the minimum the data dependencies
@@ -121,7 +96,7 @@ sending those neighbours to the host in Q14 rather than float halves the extra t
 
 ## 3. The pipeline, and where detection hides
 
-Single-frame latency is ~52 ms. Throughput is 31.7 ms because the GPU computes frame
+Single-frame latency is ~50 ms. Throughput is 31.7 ms because the GPU computes frame
 $$t{+}1$$ while the CPU works on frame $$t$$:
 
 ![overlap](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/overlap.png)
@@ -143,7 +118,7 @@ is a measurement attached to a machine.)
 **Keypoint detection is a third thread, and it is free.** The system needs a sparse
 feature set as well as a dense map — for tracking and odometry — and detection is 29 ms
 of one core. Run inside the pipelined loop beside the decode, it costs **0.4–1.4 ms of
-frame time**, because it hides under the 26 ms of kernels. 97.3% of detected keypoints
+frame time**, because it hides under the 26.9 ms of kernels. 97.3% of detected keypoints
 carry a disparity read straight out of the dense map.
 
 That last point is a result, not plumbing. Sampling the dense map at the keypoints
@@ -158,7 +133,7 @@ detection step timed nothing and the frame rate looked unchanged for the wrong r
 
 ## 4. The layout that ends the `[d][x]`-versus-`[x][d]` question
 
-Parts 1 and 2 kept running into the same question: is the cost volume
+[Part 1][p1] and [Part 2][p2] kept running into the same question: is the cost volume
 [disparity-major or disparity-minor][gl-layout]? The CPU answered three times —
 disparity-major, because the aggregation filter wants whole constant-disparity planes,
 and the transpose to the other layout was the dominant memory cost of the early
@@ -195,24 +170,31 @@ Measured steady state, pipelined over 30 frames, best of three at locked clocks:
 
 | resolution | disparities | ms/frame | rate |
 |---|---|---|---|
-| 424×240 | 60 | 8.7 | 115 Hz |
-| 450×375 | 60 | 13.7 | 73 Hz |
-| 640×480 | 60 | 24.1 | 42 Hz |
-| **848×480** (sensor native) | **60** | **31.7** | **31.5 Hz** |
-| 848×480 | 96 | 48.6 | 20.6 Hz |
-| 848×480 | 128 | 48.4 | 20.7 Hz |
+| 424×240 | 64 | 8.7 | 115 Hz |
+| 450×375 | 64 | 13.7 | 73 Hz |
+| 640×480 | 64 | 24.1 | 42 Hz |
+| **848×480** (sensor native) | **64** | **31.7** | **31.5 Hz** |
+| 848×480 | 96 | 48.4 | 20.7 Hz |
+| 848×480 | 128 | 48.5 | 20.6 Hz |
 
-Two practical notes. **Disparity range costs in steps of 64**, because the $$k$$-runs
-pad to a multiple of 64 — so $$D=128$$ is free if you are already paying for $$D=96$$,
-and staying at $$D \le 64$$ halves the volume. And **848×480 at $$D=60$$ is the only
-configuration that closes 30 Hz**, at 96% of the frame budget. Thermal throttling on a
-vehicle will eat into that margin; the pipeline degrades to 15 Hz rather than falling
-over.
+**Disparity range costs in steps of 64**, because the $$k$$-runs pad to a multiple of
+64. The step is the whole story: $$D=32$$ measures 25.5 ms in the cost stage and
+$$D=64$$ measures 25.6, while $$D=65$$ measures 41.8 and $$D=128$$ measures 42.4. So
+$$D=128$$ is free if you are already paying for $$D=96$$, and **asking for fewer than
+64 disparities saves nothing at all** — it buys the same block and discards part of
+it. $$D=64$$ is therefore the only sensible setting below the cliff, and it is where
+the matcher runs: 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget, and it
+is the only configuration that does. Thermal throttling on a vehicle will eat into
+that margin; the pipeline degrades to 15 Hz rather than falling over.
 
-The 848×480 rows use a synthetic pair — two consecutive frames from one channel —
-because the recorded bags hold no rectified 848×480 left/right dump. The kernels sweep
-a fixed $$D$$ and are data-independent, so their timing carries; the CPU decode is
-mildly data-dependent, which is why this reads 31.7 against 31.9 on a real pair.
+That step has a consequence outside the timing table. The live pipeline had its
+minimum range set to 0.4 m, which is $$D=53$$ — inside the same block as 64, so the
+missing eleven disparities were already bought and thrown away, and everything nearer
+than 0.4 m came back as a confident wrong answer rather than as a gap. Fixing it cost
+nothing measurable: 32.0 ms at $$D=53$$ against 31.7 at $$D=64$$.
+
+The 848×480 rows are measured on a recorded IR pair from the camera. The smaller
+resolutions are Middlebury scenes at their native sizes.
 
 ## 6. What did not work
 
@@ -276,13 +258,13 @@ a dedicated sparse matcher produced.
 What is genuinely unfinished:
 
 - **Coverage.** 80% of pixels answered at the shipping gate against [SGM's][gl-sgm] 90%,
-  and Part 2's [curve][gl-metrics] shows SGM's curve sitting below this one where they
+  and Part 2's [precision–coverage curve][p2-curve] shows SGM's curve sitting below this one where they
   overlap — by about two points at matched coverage, down from three before the
   equiangular estimator. No parameter closes it; the levers that would are structural
   and were measured and declined.
 - **The descriptor, which is the largest single item in the error budget.** 10.8% of
   far-field pixels have no candidate within half a pixel anywhere in the top eight, so
-  no solver on this cost volume can reach them. Part 2 measures that a *bigger* Census
+  no solver on this cost volume can reach them. [Part 2's parameter table][p2-params] measures that a *bigger* Census
   descriptor only trades along the precision–coverage curve, which means the gap is in
   the similarity function rather than in its resolution. That is the one place this
   design is beaten by the learned costs the top of the Middlebury table runs on, and
@@ -298,8 +280,8 @@ What is genuinely unfinished:
   and neither a sharper edge-aware filter nor a wider candidate set moves them. What is
   left is half-occlusion — support that has no counterpart in the other image — which
   is a different problem from the one the aggregation solves.
-- **The temporal direction, which is where MASDA's own claim is still open.** Part 2's
-  ablation says the message passing does not earn its keep deciding between two
+- **The temporal direction, which is where MASDA's own claim is still open.** [Part 2's
+  ablation][p2-ablation] says the message passing does not earn its keep deciding between two
   candidates on a rectified row. Frame-to-frame association is the opposite situation:
   the candidate set is large, two-dimensional, and genuinely ambiguous, and there is no
   dense map of the *motion* to read instead. That is the experiment the series has been
@@ -320,6 +302,9 @@ Full citations with DOIs, and every term this post uses, are in the
   makes real-time.
 
 [p1]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/
+[p2-curve]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#5-the-precisioncoverage-curve-and-reading-it-against-sgm
+[p2-params]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#7-what-the-parameters-are-worth
+[p2-ablation]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#8-the-ablation-the-message-passing-is-not-what-makes-this-work
 [p2]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
 [gl-appendix]: https://www.mariolueder.com/masda-glossary/
 [gl-masda]: https://www.mariolueder.com/masda-glossary/#masda
@@ -330,7 +315,6 @@ Full citations with DOIs, and every term this post uses, are in the
 [gl-rf]: https://www.mariolueder.com/masda-glossary/#edge-aware-recursive-filter
 [gl-subpix]: https://www.mariolueder.com/masda-glossary/#sub-pixel-disparity
 [gl-sgm]: https://www.mariolueder.com/masda-glossary/#semi-global-matching
-[gl-metrics]: https://www.mariolueder.com/masda-glossary/#coverage-precision-and-the-bad-pixel-rate
 [gl-layout]: https://www.mariolueder.com/masda-glossary/#disparity-major-and-disparity-minor-layout
 [gl-res2tac]: https://www.mariolueder.com/masda-glossary/#res2tac
 [gl-nehab]: https://www.mariolueder.com/masda-glossary/#gpu-efficient-recursive-filtering

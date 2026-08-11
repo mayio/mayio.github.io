@@ -43,7 +43,7 @@ scenes under the benchmark's own scoring rules:
 | Middlebury's [SGM][gl-sgm] reference | 29.1% | 90.2% |
 
 Ahead on the error rate over answered pixels, ten points behind on how many pixels
-it answers. Section 5 shows the whole curve, which is the only fair way to read a
+it answers. [The whole curve](#5-the-precisioncoverage-curve-and-reading-it-against-sgm) is below, which is the only fair way to read a
 matcher that declines to answer.
 
 ---
@@ -51,8 +51,9 @@ matcher that declines to answer.
 ## 1. The cost volume is never built
 
 The textbook pipeline materialises a $$W \times H \times D$$ [cost volume][gl-costvolume]
-— 40 MB per frame at 450×375, 98 MB at 848×480 — aggregates it, then reads it back to
-pick winners. I built that first, then measured what the solver actually consumes.
+— at $$D=64$$ that is 43 MB per frame at 450×375 and 104 MB at 848×480 in float, or
+half of each once the scores are [Q14][gl-q14] int16 — aggregates it, then reads it
+back to pick winners. I built that first, then measured what the solver actually consumes.
 
 **How many candidates per pixel does MASDA need?** Sweeping $$k$$, the number of
 top-scoring disparities kept per pixel, against the full volume:
@@ -67,7 +68,7 @@ speaking again: the second-best candidate carries real information, since it def
 the margin. The eighth carries none.
 
 With $$k=2$$, the running top-2 per pixel *is* the reduced volume. So the pipeline
-computes one disparity plane at a time — score, filter, insert — and the 40 MB array
+computes one disparity plane at a time — score, filter, insert — and the array
 never exists:
 
 ![no volume](/assets/img/2026-08-08-Dense-MASDA_files/novolume.png)
@@ -75,7 +76,8 @@ never exists:
 The insert's common case is a rejection that reads one cached plane, so the whole
 stage is a single streaming pass over the scored planes. Removing the volume measured
 **1.9× end to end**, and it is also what made the accuracy work possible: every
-parameter in section 7 was swept on a pipeline fast enough to iterate on.
+parameter in [the sweep](#7-what-the-parameters-are-worth) was measured on a pipeline
+fast enough to iterate on.
 
 Three structural properties fall out of this design and matter later:
 
@@ -85,8 +87,8 @@ Three structural properties fall out of this design and matter later:
   reduction.
 - **The aggregation needs whole constant-disparity planes.** The recursive filter runs
   across the image at one disparity. This constraint decides the outcome of two
-  separate experiments in section 9, and it is the single most consequential property
-  of the design.
+  separate experiments in [what did not work](#9-what-did-not-work-and-why), and it is
+  the single most consequential property of the design.
 
 ## 2. Sub-pixel disparity: the largest accuracy result in the project
 
@@ -130,8 +132,8 @@ rest, at the price of a second filtered plane. Not built.
 
 Two things about the implementation are worth the space.
 
-**Getting the neighbours back.** The whole point of section 1 is that the filtered cost
-volume does not exist, so the two costs the fit needs are gone by the time the winner
+**Getting the neighbours back.** The whole point of [never building the volume](#1-the-cost-volume-is-never-built)
+is that the filtered cost volume does not exist, so the two costs the fit needs are gone by the time the winner
 is known. The cost stage now retains a three-wide window around each pixel's *running*
 best — when a new best is set, the previous plane's value is its left neighbour, and
 the next plane's value is its right. That only works if the disparity planes arrive in
@@ -152,7 +154,7 @@ fell from 5.3 of 6 cores to 3.7. That is worth more than the arithmetic it saved
 
 For most of this project the accuracy number came from eight Middlebury 2003/2005
 scenes at 450×375, scored at native resolution. That benchmark is structurally
-incapable of seeing the result in section 2: at a one-pixel threshold on the native
+incapable of seeing [the sub-pixel result](#2-sub-pixel-disparity-the-largest-accuracy-result-in-the-project): at a one-pixel threshold on the native
 grid, integer output costs almost nothing. Sub-pixel disparity measured as *slightly
 harmful* there, was recorded as a negative, and sat disabled.
 
@@ -189,8 +191,8 @@ either no ground truth, or the margin gate declining to commit:
 The error column is the interesting one. The residual error is at depth
 discontinuities and in [repetitive texture][gl-ambiguity], which is where Part 1's
 ambiguity analysis predicted every matcher loses — including the exact assignment
-solver. Section 6 measures exactly how much of the total error lives near
-discontinuities, because it turns out to decide whether a whole family of improvements
+solver. [The error budget](#6-where-a-pixel-is-actually-lost) measures exactly how much of the
+total error lives near discontinuities, because it turns out to decide whether a whole family of improvements
 is worth building.
 
 ## 5. The precision–coverage curve, and reading it against SGM
@@ -220,7 +222,16 @@ Where the coverage goes is worth knowing, because it is not lost:
 | the margin gate | 11.1 points |
 | contention in the one-to-one decode | 0.2 points |
 
-98% of it is the gate, which is a chosen position on the curve. I built the fix for the
+One property of the margin bounds how far it can be trusted, and it is not visible on
+a benchmark. **Best-minus-second is only defined over the candidates actually
+searched.** Where the true disparity is outside the search range, or its match lies off
+the edge of the other image, the best candidate has no real competitor and the margin
+is therefore *large*. On the camera this is not hypothetical: raising the gate to 0.05
+on a scene whose near floor sat outside the search range removed a fifth of the wrong
+points and four fifths of the right ones. A confidence that reads only the cost curve
+cannot see the case where the answer was never on the curve.
+
+98% of the coverage cost is the gate, which is a chosen position on the curve. I built the fix for the
 other 0.2 — when a pixel's best candidate points at a right pixel some other pixel
 already claimed, retry its second candidate instead of dropping the pixel — and
 measured coverage 80.1% → 80.3% for error 26.0% → 26.3%. It pays for what it recovers.
@@ -252,8 +263,8 @@ Reading the bill:
   two candidates.
 - **13.1% is the selector's.** The truth is in the top-2 and the top-1 was taken.
   That is the one component with a clear mandate and no mechanism currently
-  collecting it: section 7 shows that neither winner-take-all nor message passing
-  gets it.
+  collecting it: [the ablation](#8-the-ablation-the-message-passing-is-not-what-makes-this-work)
+  shows that neither winner-take-all nor message passing gets it.
 - **8.5% is the fit**, on pixels whose integer was already right.
 
 One methodological note, because it changed the answer. Run on Teddy alone, this
@@ -382,6 +393,16 @@ many candidates on deliberately ambiguous projected-dot texture, and temporal
 association — where the candidate set is genuinely large and two-dimensional — has not
 been tested. Message passing is off by default in the dense path and one flag away.
 
+The camera adds a detail the benchmark cannot show. On a live scene where part of the
+floor fell outside the search range — so those pixels had no correct answer available —
+the iteration count moved coverage from 88.3% to 90.0% and moved the number of points
+on a demonstrably false surface from 242 to 473, concentrated in the strip where the
+correct match lies off the edge of the right image. The extra coverage is partly
+coverage of pixels that cannot be answered: message passing propagates support along
+the row, and where no correct answer exists it propagates the wrong one and raises its
+confidence. **A one-to-one constraint does not reject an occluded pixel when the true
+partner is outside the image**, because there is no competitor for it to lose to.
+
 ## 9. What did not work, and why
 
 Four families of improvement were measured and declined. Each was priced before it was
@@ -495,7 +516,8 @@ Full citations with DOIs, and every term this post uses, are in the
   under shared plane hypotheses; the one remaining candidate for range restriction that
   produces tile-constant hypotheses by construction.
 - [Shahbazi et al., *Revisiting intrinsic curves for efficient dense stereo
-  matching*][gl-icsg], ISPRS 2016 — the per-pixel range reduction measured in section 8.
+  matching*][gl-icsg], ISPRS 2016 — the per-pixel range reduction measured in
+  [what did not work](#9-what-did-not-work-and-why).
 
 [p1]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/
 [p3]: https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/
@@ -530,3 +552,4 @@ Full citations with DOIs, and every term this post uses, are in the
 [gl-espresso]: https://www.mariolueder.com/masda-glossary/#espresso
 [gl-icsg]: https://www.mariolueder.com/masda-glossary/#intrinsic-curves
 [gl-tx2]: https://www.mariolueder.com/masda-glossary/#jetson-tx2
+[gl-q14]: https://www.mariolueder.com/masda-glossary/#q14-fixed-point

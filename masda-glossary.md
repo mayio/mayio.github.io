@@ -252,8 +252,16 @@ accepted edge still raises the objective ([section 3.1](https://www.mariolueder.
 The margin is best-minus-second-best in the same message currency: a per-pixel
 confidence that MASDA produces as a by-product rather than as an extra pass. The
 *margin gate* refuses to answer where the margin is small, trading coverage for
-precision. It is the mechanism behind the 76% coverage in Part 2's SGM comparison,
+precision. It is the mechanism behind the 79.6% coverage in Part 2's SGM comparison,
 and the reason a MASDA answer can be *absent* rather than merely wrong.
+
+Its limit is worth knowing because it is structural rather than a matter of tuning:
+best-minus-second is **only defined over the candidates that were searched**. Where
+the true match lies outside the disparity range, or off the edge of the other image,
+the winner has no real competitor and the margin is therefore large. Measured on the
+camera, raising the gate on a scene whose near floor sat outside the search range
+removed a fifth of the wrong points and four fifths of the right ones. A confidence
+read from the cost curve cannot see the case where the answer was never on the curve.
 
 ### Segment reduction and max-excluding
 
@@ -335,22 +343,28 @@ and Zhang is the classic algorithm.
 The horizontal offset between a point's two projections, $$d = x_L - x_R$$, in
 pixels. It is inverse depth: $$Z = fB/d$$ for focal length $$f$$ and baseline
 $$B$$, so one disparity step is a large distance change far away and a small one up
-close. $$D$$ throughout this series is the number of disparities searched (60 on
+close. $$D$$ throughout this series is the number of disparities searched (64 on
 the camera, up to 80 on the benchmark scenes), and a *disparity plane* is the
-whole image scored at one fixed $$d$$.
+whole image scored at one fixed $$d$$. 64 is not a tuning choice: the GPU pads a
+pixel's disparity run to a multiple of 64, so every $$D$$ from 1 to 64 costs the
+same and asking for fewer buys nothing.
 
 ### Occlusion
 
 A surface visible in one camera and hidden in the other, so a correct match simply
 does not exist. It affects 10–20% of pixels on these scenes, concentrated at depth
-discontinuities — which is where stereo is hardest anyway — and it is the reason
+discontinuities — which is where stereo is hardest anyway — and it has a second, purely
+geometric form at the frame edge: a pixel at column $$x$$ can only be searched over
+disparities up to $$x$$, so near objects at the left border have their match off the
+sensor entirely — and it is the reason
 [clutter and misdetection](#clutter-and-misdetection) have to be part of the model
 rather than a threshold bolted on afterwards.
 
 ### Cost volume
 
 The $$W \times H \times D$$ array holding a matching score for every (pixel,
-disparity) pair: 40 MB per frame at 450×375, 98 MB at 848×480. Building it,
+disparity) pair: at $$D=64$$, 43 MB per frame at 450×375 and 104 MB at 848×480 in
+float, half of each once the scores are [Q14](#q14-fixed-point) int16. Building it,
 aggregating it, then reading it back to pick winners is the textbook four-stage
 pipeline codified in Scharstein and Szeliski's taxonomy. Part 2's second section is
 about never materialising it — with two candidates per pixel, the running top-2
@@ -456,7 +470,9 @@ several one-dimensional paths across the image and sums the results, approximati
 a 2-D energy at 1-D cost. It has **no uniqueness constraint** — a
 [left-right consistency check](#left-right-consistency-check) is added afterwards,
 which costs a second matcher run — and no native confidence. It is the direct
-competitor here, measured in Part 2 at 10.9% bad-1.0 against dense MASDA's 9.7%.
+competitor here, measured in Part 2 at 29.1% bad-1.0 on Middlebury v3 against dense
+MASDA's 24.5%, and at 10.9% against 9.8% on the older eight-scene benchmark — with
+SGM answering ten points more pixels in both.
 The two mechanisms are orthogonal, and a factor graph carrying both uniqueness and
 path smoothness is the interesting object neither tool implements today.
 
@@ -469,7 +485,12 @@ path smoothness is the interesting object neither tool implements today.
 Match left-to-right, match right-to-left, and keep only the pixels where the two
 agree. The standard way to detect occlusions and mismatches after the fact, and the
 standard way to get uniqueness without modelling it — at the price of running the
-matcher twice. MASDA gets the same property inside one inference pass.
+matcher twice. MASDA gets the *uniqueness* inside one inference pass, but not the
+occlusion detection: a left pixel whose true partner lies outside the right image has
+no competitor to lose to, so uniqueness leaves it alone. Measured on the camera,
+raising the message-passing iterations there increased the number of points on a
+demonstrably false surface rather than suppressing them. The two properties are
+usually named together and are not the same property.
 
 > P. Fua (1993). *A parallel stereo algorithm that produces dense depth maps and
 > preserves image features.* Machine Vision and Applications 6(1), 35-49.
