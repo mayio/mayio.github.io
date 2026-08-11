@@ -2,7 +2,7 @@
 layout: post
 title: 'Dense Stereo Matching with Max-Sum Belief Propagation on Sparse Matrices (MASDA)'
 subtitle: 'The one-to-one constraint applied to every pixel: what uniqueness buys over winner-take-all, how much of that the message passing is actually responsible for, how close loopy max-sum gets to the exact assignment optimum, and why the sparse-matrix representation decides everything.'
-thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_teddy.png
+thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/thumb_p1.png
 date: '2026-08-07 19:00:00 +0200'
 categories: association
 comments: false
@@ -416,7 +416,7 @@ measured over 1.3 million answers.
 
 For the full engineered pipeline (the C++ implementation with its
 [margin gate](/masda-glossary/#margin-and-the-margin-gate),
-which trades a little coverage for precision), [Part 2][p2] measures **25.2%
+which trades a little coverage for precision), [Part 2][p2] measures **24.5%
 [bad-1.0](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate) at 79.6%
 [coverage](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate)** on the fifteen
 Middlebury v3 training scenes, against the benchmark's own
@@ -671,8 +671,9 @@ along scanline paths and has **no uniqueness constraint at all** — a
 afterwards, which costs a second matcher run.
 MASDA gets mutual exclusivity inside the inference, in one run, plus a per-pixel
 confidence (the [margin](/masda-glossary/#margin-and-the-margin-gate)) as a by-product. Measured head-to-head in Part 2:
-**9.7% bad-1.0 against SGM's 10.9%** over these eight scenes, at 76% against 78%
-coverage. The two mechanisms are orthogonal, and the interesting object — a
+**9.2% bad-1.0 against OpenCV SGM's 10.9%** over these eight scenes at native
+resolution, at 76% against 78% coverage — and behind Middlebury's own SGM reference on
+the harder v3 set, where the two curves cross the other way. The two mechanisms are orthogonal, and the interesting object — a
 factor graph with both uniqueness and path smoothness — does not exist in either
 tool today.
 
@@ -751,7 +752,7 @@ interesting object this formulation makes possible.
 **[Sub-pixel disparity](/masda-glossary/#sub-pixel-disparity) — since built, and it was the
 largest accuracy result in the project.** The candidates are integer, which forfeits up
 to half a pixel before any matching error. A parabola through the aggregated cost at
-the winner and its two neighbours took the engineered matcher from 41.5% to 25.2%
+the winner and its two neighbours took the engineered matcher from 41.5% to 24.5%
 bad-1.0 at unchanged coverage. [Part 2][p2] has the construction and the reason it
 went unmeasured for so long: the benchmark in use could not resolve it.
 

@@ -2,7 +2,7 @@
 layout: post
 title: 'Dense Stereo Matching with Max-Sum Belief Propagation on a Jetson TX2 (MASDA, Part 2)'
 subtitle: 'The dense matcher end to end: why the cost volume is never built, what sub-pixel disparity is worth, which parameters do nothing, and the ablation that says the message passing is not what makes this work.'
-thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/maps_a.png
+thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/thumb_p2.png
 date: '2026-08-08 22:00:00 +0200'
 categories: association
 comments: false
@@ -39,7 +39,7 @@ scenes under the benchmark's own scoring rules:
 
 | | [bad-1.0][gl-metrics] | [coverage][gl-metrics] |
 |---|---|---|
-| **dense MASDA** | **25.2%** | 79.6% |
+| **dense MASDA** | **24.5%** | 79.6% |
 | Middlebury's [SGM][gl-sgm] reference | 29.1% | 90.2% |
 
 Ahead on the error rate over answered pixels, ten points behind on how many pixels
@@ -75,7 +75,7 @@ never exists:
 The insert's common case is a rejection that reads one cached plane, so the whole
 stage is a single streaming pass over the scored planes. Removing the volume measured
 **1.9× end to end**, and it is also what made the accuracy work possible: every
-parameter in section 6 was swept on a pipeline fast enough to iterate on.
+parameter in section 7 was swept on a pipeline fast enough to iterate on.
 
 Three structural properties fall out of this design and matter later:
 
@@ -85,7 +85,7 @@ Three structural properties fall out of this design and matter later:
   reduction.
 - **The aggregation needs whole constant-disparity planes.** The recursive filter runs
   across the image at one disparity. This constraint decides the outcome of two
-  separate experiments in section 8, and it is the single most consequential property
+  separate experiments in section 9, and it is the single most consequential property
   of the design.
 
 ## 2. Sub-pixel disparity: the largest accuracy result in the project
@@ -108,8 +108,25 @@ however right it is. The matcher's own integer output measured 41.5%, which is c
 to that 45.6% ceiling: the matching was already good, and the output format was
 throwing it away.
 
-With the fit: **41.5% → 25.2%, at coverage that does not move** — 16.3 points. The fit changes
-values, never decisions.
+With the fit: **41.5% → 24.5%, at coverage that does not move** — 17 points. The fit
+changes values, never decisions.
+
+**The estimator matters as much as having one.** The obvious choice is a parabola
+through the three samples, and it is the wrong shape for this cost. The graded score
+blends Census with a *truncated absolute difference*, which is piecewise linear, so
+the surface around the winner is locally a **V** rather than a bowl. The equiangular
+estimator — the standard one for a V — is the same arithmetic and no extra memory:
+
+| estimator | bad-1.0 | coverage |
+|---|---|---|
+| parabola | 25.18 | 79.6% |
+| **equiangular** | **24.47** | 79.6% |
+| equiangular, Census only (`--ad 0`) | **23.75** | 79.8% |
+
+0.71 points for one line. The third row says the absolute-difference term still costs
+0.72 even with the right estimator, so this is not purely an estimator mismatch —
+fitting on the Census term while *selecting* on the graded cost would collect the
+rest, at the price of a second filtered plane. Not built.
 
 Two things about the implementation are worth the space.
 
@@ -172,7 +189,7 @@ either no ground truth, or the margin gate declining to commit:
 The error column is the interesting one. The residual error is at depth
 discontinuities and in [repetitive texture][gl-ambiguity], which is where Part 1's
 ambiguity analysis predicted every matcher loses — including the exact assignment
-solver. Section 8 measures exactly how much of the total error lives near
+solver. Section 6 measures exactly how much of the total error lives near
 discontinuities, because it turns out to decide whether a whole family of improvements
 is worth building.
 
@@ -209,7 +226,43 @@ already claimed, retry its second candidate instead of dropping the pixel — an
 measured coverage 80.1% → 80.3% for error 26.0% → 26.3%. It pays for what it recovers.
 Reverted.
 
-## 6. What the parameters are worth
+## 6. Where a pixel is actually lost
+
+A single error rate says how often the matcher is wrong, not which component was
+wrong. Dumping the aggregated cost volume and asking where the true disparity *ranks*
+splits it. Over the 2.35 million far-field pixels — those nowhere near a depth
+discontinuity, which carry 71% of all error:
+
+![budget](/assets/img/2026-08-08-Dense-MASDA_files/budget.png)
+
+| a candidate within 0.5 px of the truth | top-1 | top-2 | top-4 | top-8 |
+|---|---|---|---|---|
+| far field | 67.9% | 81.0% | 85.8% | 89.2% |
+| near a discontinuity | 58.8% | 75.7% | 84.6% | 90.1% |
+
+Half a pixel is the threshold that matters, because a candidate that close is the
+nearest integer to the truth and the sub-pixel fit can still reach the answer. A
+candidate a full pixel away cannot be refined into a correct one.
+
+Reading the bill:
+
+- **The descriptor is the largest single item.** 10.8% of far-field pixels have no
+  candidate within half a pixel *anywhere in the top eight* — unreachable by any
+  solver on this cost volume — and 19.0% are unreachable without keeping more than
+  two candidates.
+- **13.1% is the selector's.** The truth is in the top-2 and the top-1 was taken.
+  That is the one component with a clear mandate and no mechanism currently
+  collecting it: section 7 shows that neither winner-take-all nor message passing
+  gets it.
+- **8.5% is the fit**, on pixels whose integer was already right.
+
+One methodological note, because it changed the answer. Run on Teddy alone, this
+table says the fit is dominant and the descriptor is nearly free — Teddy's cost is
+much better than average, 92.8% top-1 in the far field against 67.9% pooled. The
+fifteen-scene number *inverts* the ordering. One scene is not a benchmark, and this
+is the cleanest demonstration of that in the project.
+
+## 7. What the parameters are worth
 
 Every parameter in the matcher, swept on the fifteen v3 scenes at the shipping
 configuration. Some of these had never been measured, and one of them had never been
@@ -223,6 +276,9 @@ inherited a value:
 |---|---|---|---|---|---|
 | bad-1.0 | 24.98 | **25.18** | 25.61 | 26.17 | 28.32 |
 | coverage | 79.9% | 79.6% | 79.3% | 78.9% | 77.8% |
+
+*(This sweep and the two below predate the equiangular estimator, so their absolute
+values sit 0.7 above the current operating point. The shapes are what they are for.)*
 
 Better on *both* axes at 6–8 than at 12, and free: the filter is an IIR whose cost does
 not depend on $$\sigma$$. Now 8. This is the cheapest 0.9 points in the project and it
@@ -263,7 +319,33 @@ almost never fires. Above zero they work — and what they do is trade coverage 
 precision at roughly the same exchange rate as the margin gate, which is to say they
 are a second gate rather than a second mechanism.
 
-## 7. The ablation: the message passing is not what makes this work
+**Descriptor size trades, it does not improve.** The obvious response to a 10.8%
+descriptor bill is a bigger descriptor — the Census window is a template and 9×7 is 62
+bits, which still fits a `uint64`. Before touching fifteen border literals in the cost
+loops and the CUDA census kernel, the direction was priced on the axis already wired.
+`--csct` is the same Census at 24 bits instead of 48:
+
+| | bad-1.0 | coverage |
+|---|---|---|
+| 7×7 Census, 48 bit | 25.18 | 79.6% |
+| centre-symmetric, 24 bit | **24.68** | 75.9% |
+
+Halving the descriptor *lowers* the error rate by 0.5 and costs 3.7 points of
+coverage. That is the same precision–coverage trade every other knob offers — not a
+better or worse descriptor, a differently-gated one. If 24 fewer bits only slides
+along the curve, 14 more will too, so 9×7 is not worth building.
+
+Which sharpens what that 10.8% is: **not a bits problem.** More of the same descriptor
+will not collect it. It is a limit of Census-plus-truncated-difference as a similarity
+measure on weakly textured and repetitive surfaces, and changing that means changing
+the similarity function itself.
+
+**And one flag does nothing at all.** `--agg`, the aggregation radius, produces
+identical output at 3, 7 and its default, because the recursive filter ignores it. It
+survives as a flag because an older box-filter path read it. Worth stating rather than
+leaving for someone to sweep.
+
+## 8. The ablation: the message passing is not what makes this work
 
 The matcher is named after an inference algorithm, so the obvious question is what that
 inference contributes. Disabling the message passing leaves everything else in place —
@@ -300,7 +382,7 @@ many candidates on deliberately ambiguous projected-dot texture, and temporal
 association — where the candidate set is genuinely large and two-dimensional — has not
 been tested. Message passing is off by default in the dense path and one flag away.
 
-## 8. What did not work, and why
+## 9. What did not work, and why
 
 Four families of improvement were measured and declined. Each was priced before it was
 built, which is the only reason the list is short.
@@ -356,7 +438,7 @@ no more precise than MASDA on identical candidates, so the inference is not what
 the outcome. **The candidate set is.** What you offer the solver matters more than how
 cleverly you restrict it, and both of these experiments restricted it cleverly.
 
-## 9. Where this leaves the CPU implementation
+## 10. Where this leaves the CPU implementation
 
 At the camera's 848×480 the CPU matcher is a 5 Hz matcher, and the solve — the part
 that is MASDA — is memory-bound rather than arithmetic-bound. Two structural properties
@@ -378,12 +460,16 @@ rules, each paid for:
    worth 1.24× on the desktop and flat on the Jetson.
 2. **The benchmark decides what you can see.** Sub-pixel disparity was a recorded
    negative for months because the benchmark in use could not resolve it.
-3. **Check that a default change is live before measuring it.** A header was listed as
-   a prerequisite in one build rule and not the other, so a header-only change relinked
-   nothing, `make` printed success, and a fifteen-scene benchmark measured the old
-   value and reported it as the new one. What caught it was the result coming back
-   *exactly* equal to the previous figure. A slightly different one would have been
-   believed.
+3. **Check that a default change is live before measuring it — twice over.** A header
+   was listed as a prerequisite in one build rule and not the other, so a header-only
+   change relinked nothing, `make` printed success, and a fifteen-scene benchmark
+   measured the old value and reported it as the new one. Then both benchmark harnesses
+   turned out to pass `--iters` with values of their own, silently overriding the
+   binary's default — so "the default configuration" had for weeks meant *the
+   harness's* opinion, and a default change read as no change whatsoever. Both were
+   caught by a number coming back **exactly** equal to a figure that should have moved.
+   An unchanged measurement is a weaker signal than an error, and a slightly different
+   one would have been believed.
 
 ---
 

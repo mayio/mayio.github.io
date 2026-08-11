@@ -2,7 +2,7 @@
 layout: post
 title: 'Real-Time Dense Stereo on a Jetson TX2 (MASDA, Part 3)'
 subtitle: 'The GPU takes the image plane, the CPU keeps the graph: kernel dataflow, the memory layout the CPU rejected three times, bit-identity as the referee, and what the board delivers at each resolution.'
-thumbnail-img: /assets/img/2026-08-09-Realtime-Dense-MASDA_files/real_pair.png
+thumbnail-img: /assets/img/2026-08-09-Realtime-Dense-MASDA_files/thumb_p3.png
 date: '2026-08-09 01:00:00 +0200'
 categories: association
 comments: false
@@ -112,7 +112,7 @@ never materialised at all. What remains in DRAM is the minimum the data dependen
 allow — the recurrences genuinely need their intermediate planes.
 
 **The sub-pixel fit rides along for free here.** [Part 2][p2] describes the fit and what
-it is worth: 41.5% → 25.2% bad-1.0. On the CPU it costs 1.30×, because the two
+it is worth: 41.5% → 24.5% bad-1.0. On the CPU it costs 1.30×, because the two
 neighbouring costs have to be retained while streaming planes. On the GPU they are
 already in registers: the top-2 reduction has the whole disparity range of a pixel live
 across the warp at the moment the winner is known, so publishing the winner takes one
@@ -275,10 +275,25 @@ a dedicated sparse matcher produced.
 
 What is genuinely unfinished:
 
-- **Coverage.** 80% of pixels answered at the shipping gate against [SGM's][gl-sgm] 90%, and
-  Part 2's [curve][gl-metrics] shows SGM's whole curve sitting below this one where they overlap. No
-  parameter closes that; the levers that would are structural and were measured and
-  declined.
+- **Coverage.** 80% of pixels answered at the shipping gate against [SGM's][gl-sgm] 90%,
+  and Part 2's [curve][gl-metrics] shows SGM's curve sitting below this one where they
+  overlap — by about two points at matched coverage, down from three before the
+  equiangular estimator. No parameter closes it; the levers that would are structural
+  and were measured and declined.
+- **The descriptor, which is the largest single item in the error budget.** 10.8% of
+  far-field pixels have no candidate within half a pixel anywhere in the top eight, so
+  no solver on this cost volume can reach them. Part 2 measures that a *bigger* Census
+  descriptor only trades along the precision–coverage curve, which means the gap is in
+  the similarity function rather than in its resolution. That is the one place this
+  design is beaten by the learned costs the top of the Middlebury table runs on, and
+  it is deliberately out of scope here: the GPU is at 96% of the frame budget and
+  nothing neural fits behind it.
+- **The selector.** 13.1% of far-field pixels have the truth sitting in the top-2 with
+  the top-1 taken. Neither winner-take-all nor MASDA's message passing collects it —
+  they measure within a point of each other — so this is a real mandate with no
+  mechanism currently addressing it. With two candidates it is a binary choice per
+  pixel, and the one thing that has never been tried on it is a term that couples
+  neighbouring pixels *across* rows. MASDA's uniqueness runs along a row only.
 - **Occlusion.** Pixels within 8 px of a depth discontinuity carry 28.6% of all error,
   and neither a sharper edge-aware filter nor a wider candidate set moves them. What is
   left is half-occlusion — support that has no counterpart in the other image — which
