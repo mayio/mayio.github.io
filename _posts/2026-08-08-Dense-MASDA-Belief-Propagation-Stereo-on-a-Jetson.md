@@ -55,7 +55,58 @@ The textbook pipeline materialises a $$W \times H \times D$$ [cost volume][gl-co
 half of each once the scores are [Q14][gl-q14] int16 — aggregates it, then reads it
 back to pick winners. I built that first, then measured what the solver actually consumes.
 
-### 1.1 What "aggregate" means here
+### 1.1 The score, one pixel at a time
+
+Before anything is aggregated there has to be a number to aggregate, and it comes from
+comparing two small patches. The [Census transform][gl-census] describes a pixel by how
+its neighbours compare with it, and nothing else:
+
+$$\mathcal{C}(p) \;=\; \Big(\, \big[I(q_1) < I(p)\big],\;
+\big[I(q_2) < I(p)\big],\; \dots,\; \big[I(q_{48}) < I(p)\big] \,\Big)$$
+
+For a 7×7 window that is 48 neighbours, so 48 bits packed into a `uint64`. The centre
+pixel is not coded — it is the thing everything is compared against. What survives is
+the *ordering* of brightness in the window, not the brightness itself, which is why the
+descriptor does not care that the two cameras have different gain or that one side of
+the scene is lit more strongly than the other.
+
+Two descriptors are compared by [Hamming distance][gl-hamming] — count the bits that
+disagree — which is one instruction:
+
+$$h(p, q) \;=\; \operatorname{popcount}\big(\mathcal{C}(p) \oplus \mathcal{C}(q)\big)
+\;\in\; [0, 48]$$
+
+Here it is on one pixel of Teddy, at its true disparity and 5 px away from it:
+
+![census](/assets/img/2026-08-08-Dense-MASDA_files/census.png)
+
+The left patch codes to `0xe1c3c71c3c7c`. At the true disparity the right patch differs
+in **2 bits of 48**; five pixels away it differs in **42**, which is closer to inverted
+than to equal. That is the whole matching signal, and the figure is also a fair warning
+about what happens when a patch has no texture: every neighbour on one side of the
+centre, an all-zero code, and no signal at all.
+
+The distance becomes a score on a fixed scale, positive for agreement:
+
+$$s_{\text{census}}(h) \;=\; \frac{24 - h}{24} \qquad\text{so } h=0 \to +1,\;
+h=24 \to 0,\; h=48 \to -1$$
+
+which is $$+0.92$$ at the true disparity above and $$-0.75$$ at the wrong one. In the
+code this is a 49-entry lookup table in [Q14][gl-q14] — $$s \cdot 2^{14}$$ — so the
+whole cost is integer arithmetic from here on.
+
+One term is blended in beside it. The truncated absolute difference compares the raw
+grey values, saturating at $$T = 10$$ levels:
+
+$$s_{\text{ad}}(v) \;=\; 1 - \frac{2\min(v, T)}{T}, \qquad
+s \;=\; (1 - \alpha)\, s_{\text{census}} \;+\; \alpha\, s_{\text{ad}}, \quad \alpha = 0.15$$
+
+Census carries the structure and is blind to a constant offset; the absolute difference
+notices an offset but is helpless on flat texture. [What the parameters are
+worth](#7-what-the-parameters-are-worth) measures what that blend is actually buying,
+and the answer is not what it was when the term was added.
+
+### 1.2 What "aggregate" means here
 
 Aggregation is the stage that does most of the work, so it is worth being precise
 about it.
@@ -145,7 +196,30 @@ def aggregate(C, ax, ay):
     return C
 ```
 
-Two notes on reading it. The updates are **in place and ordered**: `C[:, x - 1]` has
+Ten pixels of one row, with real numbers — the same row and disparity as the Census
+example above, before any vertical pass:
+
+| $$x$$ | $$I(x)$$ | $$\vert\Delta I\vert$$ | $$a_x$$ | $$C$$ raw | $$F$$ after left-to-right |
+|---|---|---|---|---|---|
+| 80 | 176 | 5 | 0.729 | 0.917 | 0.917 |
+| 81 | 176 | 0 | 0.838 | 0.958 | 0.923 |
+| 82 | 156 | 20 | **0.481** | 1.000 | 0.963 |
+| 83 | 130 | 26 | **0.407** | 0.917 | 0.936 |
+| 84 | 119 | 11 | 0.618 | 0.833 | 0.897 |
+| 85 | 118 | 1 | 0.815 | 0.875 | 0.893 |
+| 86 | 116 | 2 | 0.793 | 0.917 | 0.898 |
+| 87 | 112 | 4 | 0.750 | 0.875 | 0.892 |
+| 88 | 108 | 4 | 0.750 | 0.667 | 0.836 |
+| 89 | 101 | 7 | 0.690 | 0.208 | **0.641** |
+
+Two things to read out of it. At $$x = 82$$ and $$83$$ the image steps by 20 and 26
+grey levels, the coefficient falls to 0.48 and 0.41, and the running value is pulled
+most of the way to the local cost: support does not cross that edge. And at $$x = 89$$
+the raw cost collapses to 0.208 — one bad sample — while the filtered value only falls
+to 0.641, because it is still carrying eight neighbours' worth of evidence. That is
+aggregation doing its job in one number.
+
+Two notes on reading the code. The updates are **in place and ordered**: `C[:, x - 1]` has
 already been overwritten by this pass, so it *is* $$F_{x-1}$$. And the backward pass
 uses `ax[:, x + 1]`, because a coefficient belongs to the pair of pixels it sits
 between, not to one pixel.
@@ -157,7 +231,7 @@ arithmetic: $$a$$ is stored as a `uint16` in Q15, and the recurrence multiplies 
 reproduces them bit for bit on the GPU, and that is what makes `cmp` a valid test
 there.
 
-### 1.2 How many candidates the solver needs
+### 1.3 How many candidates the solver needs
 
 **How many candidates per pixel does MASDA need?** Sweeping $$k$$, the number of
 top-scoring disparities kept per pixel, against the full volume:
