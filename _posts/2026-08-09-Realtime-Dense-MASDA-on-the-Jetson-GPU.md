@@ -24,18 +24,35 @@ layout, and the memory layout is where the surprise is.
 *Every term is defined in the [series glossary][gl-appendix]. [Part 1][p1] derives the
 message equations; [Part 2][p2] is the matcher this post makes real-time.*
 
-Here is what it produces on the camera it is built for — the [D435 IR pair][gl-d435],
-with the structured-light projector on and off:
+Here is what it produces on the camera it is built for — the [D435 IR pair][gl-d435] —
+in one kitchen, under the four conditions that matter:
 
 ![real pair](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/real_pair.png)
 
-The projector is the reason this project uses MASDA at all. With it on, the scene is
-covered in dots that make texture where there was none, and the matcher answers 88% of
-the image. With it off, the same scene, the same code: 78%, and the surfaces break up
-into speckle wherever the room is flat and grey. Those dots also make the descriptors
-**3.3× degenerate** — many pixels have identical Census codes — which is exactly the
-ambiguity a [one-to-one constraint][gl-one2one] is for, and exactly where a
-winner-take-all matcher assigns the same right pixel to several left ones.
+Read the last column first. With the room dark and the projector off, the image is
+sensor noise and nothing else: 0.12 DN of median local contrast, and a disparity map
+that is speckle at 38.6% coverage. Switch the projector on in the same darkness and
+the same code answers **88.1%**.
+
+With the lights on, the projector looks nearly unnecessary — 84.7% against 81.1%, a
+difference of 3.6 points — because the room's own light already puts texture on a
+tiled floor and a run of cabinet fronts. That is the shape of it: **room light is a
+flood illuminator and the projector is a texture source.** The matcher needs the
+second one, and only shows you that when the first is taken away.
+
+The best of the four is the dark room with the projector on, which is not the
+expected answer. A lit room forces a shorter exposure and still clips 8.6% of the
+frame, and a saturated pixel carries no texture at all.
+
+Exposure is set per condition — 1500 µs lit, 4000 µs dark — each being the value that
+holds 3–5 DN of local contrast in that room. One fixed exposure across both would
+measure the exposure rather than the projector.
+
+Those dots also make the Census descriptors **3.3× degenerate** on this camera: 338
+distinct codes for 1115 keypoints, so many pixels are indistinguishable from one
+another. That is exactly the ambiguity a [one-to-one constraint][gl-one2one] is for,
+and exactly where a winner-take-all matcher assigns the same right pixel to several
+left ones.
 
 ---
 
