@@ -230,6 +230,35 @@ wrong, which would charge the matcher for holes in the dataset.
 
 ## 3. Implementation
 
+Both updates need the same primitive: for every candidate, *the best of the
+alternatives it is competing against* — the maximum along its row or column with
+itself left out. Computed naively that is a scan per entry and the iteration is
+quadratic. It is two reductions instead, because a line has only one argmax:
+
+```python
+def top2_excluding(A, axis):
+    """For every entry, the max of its row (axis=1) or column (axis=0)
+    EXCLUDING that entry itself.
+
+    The line's largest value is the answer for every entry except the argmax
+    itself, which gets the second largest. Two reductions, no per-entry scan --
+    this is what makes an iteration linear in the number of candidates.
+    """
+    i1 = np.expand_dims(np.argmax(A, axis=axis), axis)
+    m1 = np.take_along_axis(A, i1, axis)              # the largest
+    B = A.copy()
+    np.put_along_axis(B, i1, -np.inf, axis)
+    m2 = np.max(B, axis=axis, keepdims=True)          # the second largest
+    out = np.broadcast_to(m1, A.shape).copy()
+    np.put_along_axis(out, i1, m2, axis)              # only the argmax differs
+    return out
+```
+
+Ties and dead entries are the cases to get right, and this form handles both: the
+substitution is by *index*, so two equal maxima do not both get demoted, and a line
+of `-inf` returns `-inf`. Checked against a brute-force scan over 6000 random
+matrices with a deliberately small value range, no disagreements.
+
 The solver, in the notation above — the dense-matrix reference version:
 
 ```python
@@ -572,8 +601,25 @@ with $$s + o$$ substituted for $$s$$. No new message type, no change to the
 solver's structure. This is the property that makes MASDA worth preferring over
 an exact assignment solver, which cannot follow here at all.
 
-$$\kappa$$ stays finite. Thin foreground objects genuinely violate ordering, and
-a hard constraint would delete them — the standard failure of DP-based scanline
+**It does not make the problem smaller, and the reason is worth stating** because
+the opposite is the natural guess. Ordering constrains *pairs* of associations, not
+single ones: no individual $$(i,j)$$ becomes illegal, it is only forbidden in
+combination with some other pair. The edge set — the thing that makes the matrix
+sparse — is therefore untouched, and what the factor contributes is a per-edge
+penalty folded into the score. The matrix keeps its shape; the numbers in it change.
+
+The guess is right for a different algorithm. Scanline dynamic programming commits
+matches left to right, so once $$(i,j)$$ is fixed every crossing candidate for every
+later pixel is gone and the remaining search really does shrink — that is what
+"ordering is free in DP" means. MASDA commits nothing until the decode and settles
+the whole row jointly, so it has to *represent* the constraint rather than *exploit*
+it. Representing it costs about 2400 crossing pairs against 885 edges on a dense row,
+which is the 3:1 that [the measurement](#61-measured-dense-it-works-and-it-costs-more-than-it-returns)
+turns into 5–7× the solve.
+
+What that buys is a constraint DP cannot have: a soft one. $$\kappa$$ stays finite.
+Thin foreground objects genuinely violate ordering, and a hard constraint would
+delete them — the standard failure of DP-based scanline
 methods, which is why they need forbidden-move exceptions.
 
 ### 6.1 Measured, dense: it works, and it costs more than it returns
