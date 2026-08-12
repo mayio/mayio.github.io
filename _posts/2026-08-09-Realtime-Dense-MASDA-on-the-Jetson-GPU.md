@@ -60,11 +60,11 @@ The GPU reduces; the CPU decides.
 
 ![split](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/split.png)
 
-One Tegra-specific trap lives on that arrow and cost 300 ms twice before I believed it:
-**the TX2 has no I/O coherency, so every flavour of [`cudaHostAlloc`][gl-pinned] memory
-— including the one the documentation's mental model calls "cached pinned" — is
-uncached on the CPU side.** A solver reading candidates from such memory runs about
-seven times slower than from ordinary pageable memory. The candidates travel through a
+One trap specific to Tegra sits on that arrow. It cost 300 ms twice before I believed
+it: **the TX2 has no I/O coherency.** Every kind of [`cudaHostAlloc`][gl-pinned] memory
+is therefore uncached on the CPU side — including the kind usually described as "cached
+pinned". A solver that reads candidates from such memory runs about seven times slower
+than from ordinary pageable memory. The candidates travel through a
 staged `cudaMemcpy` into a plain `std::vector`, and [the pipeline](#3-the-pipeline-and-where-detection-hides)
 is where that copy hides.
 
@@ -86,7 +86,7 @@ scored-but-unfiltered volume never makes a round trip and the fully-filtered vol
 never materialised at all. What remains in DRAM is the minimum the data dependencies
 allow — the recurrences genuinely need their intermediate planes.
 
-**The sub-pixel fit rides along for free here.** [Part 2][p2] describes the fit and what
+**The sub-pixel fit costs almost nothing on the GPU.** [Part 2][p2] describes the fit and what
 it is worth: 41.5% → 24.5% bad-1.0. On the CPU it costs 1.30×, because the two
 neighbouring costs have to be retained while streaming planes. On the GPU they are
 already in registers: the top-2 reduction has the whole disparity range of a pixel live
@@ -109,8 +109,8 @@ decode of frame $$t$$ is still on the A57s. Before this, the copy sat serially i
 loop.
 
 **The decode threads pin themselves to the A57 cluster.** The TX2 has [four A57s and
-two Denver cores][gl-cores]; unpinned, the scheduler wanders across both and the decode
-varied 30–45 ms run to run. Pinned, it sits within half a millisecond of its minimum.
+two Denver cores][gl-cores]; if the threads are not pinned, the scheduler moves them
+between the two clusters and the decode varies between 30 and 45 ms from run to run. Pinned, it sits within half a millisecond of its minimum.
 The Denvers are left to the CUDA driver and the fetcher. (The same change measured *40%
 worse* on the CPU-only matcher, which needs the Denvers for throughput. An optimisation
 is a measurement attached to a machine.)
@@ -128,8 +128,9 @@ matcher's recall is bounded by whether the *right* image's detector also fired w
 pixel of the true correspondence — a 44–51% repeatability ceiling — and a dense map has
 no such requirement. One producer, two products.
 
-It had to be measured *inside* the loop to say any of this. Bolted on after it, the
-detection step timed nothing and the frame rate looked unchanged for the wrong reason.
+None of this can be said unless detection is measured *inside* the pipelined loop.
+Measured outside it, the detection step appeared to cost nothing, and the frame rate
+looked unchanged for the wrong reason.
 
 ## 4. The layout that ends the `[d][x]`-versus-`[x][d]` question
 
@@ -184,8 +185,8 @@ $$D=128$$ is free if you are already paying for $$D=96$$, and **asking for fewer
 64 disparities saves nothing at all** — it buys the same block and discards part of
 it. $$D=64$$ is therefore the only sensible setting below the cliff, and it is where
 the matcher runs: 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget, and it
-is the only configuration that does. Thermal throttling on a vehicle will eat into
-that margin; the pipeline degrades to 15 Hz rather than falling over.
+is the only configuration that does. On a vehicle the board will get hot and slow itself down,
+which reduces that margin. When it does, the pipeline drops to 15 Hz instead of failing.
 
 That step has a consequence outside the timing table. The live pipeline had its
 minimum range set to 0.4 m, which is $$D=53$$ — inside the same block as 64, so the
@@ -199,19 +200,21 @@ resolutions are Middlebury scenes at their native sizes.
 ## 6. What did not work
 
 **A warp-serial scan of the recurrence: 55.7 ms, worse than what it replaced.** The
-recursive filter is the awkward part of the port — a per-step integer recurrence with
-truncation, so the classic [block-parallel formulation (Nehab et al.)][gl-nehab], which
+recursive filter is the hardest part to port. It is a recurrence: every step depends on
+the one before it, in integer arithmetic, with truncation. So the classic [block-parallel formulation (Nehab et al.)][gl-nehab], which
 reassociates the filter algebraically, cannot reproduce it bit-exactly. My first
 alternative kept bit-exactness by letting the 32 lanes take turns via shuffles:
-coalesced, exact, and 31 of 32 lanes burning issue slots on every serial step.
-Instruction throughput, not bandwidth. The $$k$$-minor layout made the question moot —
+coalesced, exact, and 31 of the 32 lanes idle at every serial step. The limit was
+instruction throughput, not memory bandwidth. The $$k$$-minor layout removed the
+question entirely:
 a lane per *disparity* rather than per *position* means every lane runs its own
 recurrence.
 
 **An ordered tie-break in the top-2 reduction: ten wrong pixels in 407,040.** The fused
-top-2 reduces across the warp with a `shfl_down` tree, and the tree merges
-*non-adjacent* disparity ranges — lane 0 combines lane 16 before lane 1 — so any tie
-rule of the form "the other side holds larger disparities" is wrong mid-tree. Every one
+top-2 reduces across the warp with a `shfl_down` tree. That tree merges *non-adjacent*
+disparity ranges: lane 0 combines with lane 16 before it combines with lane 1. So any
+tie rule of the form "the other side holds the larger disparities" is false in the
+middle of the tree. Every one
 of the ten differing pixels was an exact score tie. A five-million-run host simulation
 of the precise shuffle tree reproduced it; the fix packs (value, $$k$$) into a single
 integer whose plain comparison is (value descending, $$k$$ ascending), which is
@@ -224,7 +227,7 @@ run. The two scenes that passed — Teddy and Cones — are exactly the two ever
 tuned on, at $$D=60$$.
 
 **Mapping the GPU's wins back to the CPU: mostly no.** Fusing the top-2 insert into the
-filter's last pass is the GPU's single biggest win. On the CPU it is a wash — the plane
+filter's last pass is the GPU's single biggest win. On the CPU it changes nothing — the plane
 sits in L2 between passes, so the store the fusion deletes was nearly free and the
 re-read was nearly a cache hit. A first version was 18% *worse*, because putting a
 branchy insert inside the recurrence loop killed the compiler's autovectorisation.
@@ -250,10 +253,10 @@ and the message passing not paying for itself in the dense path.
 
 ## 8. Where this leaves the project
 
-The matcher runs at the camera's full resolution faster than the camera delivers
-frames, on a computer that costs less than the camera, and it hands the rest of the
-system both a dense disparity map and a sparse feature set with better disparities than
-a dedicated sparse matcher produced.
+The matcher runs at the camera's full resolution, faster than the camera delivers
+frames, on a computer that costs less than the camera. It gives the rest of the system
+two products from one pass: a dense disparity map, and a sparse feature set whose
+disparities are better than the ones a dedicated sparse matcher produced.
 
 What is genuinely unfinished:
 
@@ -266,10 +269,9 @@ What is genuinely unfinished:
   far-field pixels have no candidate within half a pixel anywhere in the top eight, so
   no solver on this cost volume can reach them. [Part 2's parameter table][p2-params] measures that a *bigger* Census
   descriptor only trades along the precision–coverage curve, which means the gap is in
-  the similarity function rather than in its resolution. That is the one place this
-  design is beaten by the learned costs the top of the Middlebury table runs on, and
-  it is deliberately out of scope here: the GPU is at 96% of the frame budget and
-  nothing neural fits behind it.
+  the similarity function rather than in its resolution. This is the one place where the learned costs at the
+  top of the Middlebury table beat this design. It is deliberately out of scope: the
+  GPU is already at 95% of the frame budget, so nothing neural fits behind it.
 - **The selector.** 13.1% of far-field pixels have the truth sitting in the top-2 with
   the top-1 taken. Neither winner-take-all nor MASDA's message passing collects it —
   they measure within a point of each other — so this is a real mandate with no
@@ -277,11 +279,11 @@ What is genuinely unfinished:
   pixel, and the one thing that has never been tried on it is a term that couples
   neighbouring pixels *across* rows. MASDA's uniqueness runs along a row only.
 - **Occlusion.** Pixels within 8 px of a depth discontinuity carry 28.6% of all error,
-  and neither a sharper edge-aware filter nor a wider candidate set moves them. What is
-  left is half-occlusion — support that has no counterpart in the other image — which
-  is a different problem from the one the aggregation solves.
+  and neither a sharper edge-aware filter nor a wider candidate set moves them. What is left is half-occlusion: part of the support
+  window has no counterpart in the other image at all. That is a different problem from
+  the one the aggregation solves.
 - **The temporal direction, which is where MASDA's own claim is still open.** [Part 2's
-  ablation][p2-ablation] says the message passing does not earn its keep deciding between two
+  ablation][p2-ablation] says the message passing does not pay for itself when it decides between two
   candidates on a rectified row. Frame-to-frame association is the opposite situation:
   the candidate set is large, two-dimensional, and genuinely ambiguous, and there is no
   dense map of the *motion* to read instead. That is the experiment the series has been

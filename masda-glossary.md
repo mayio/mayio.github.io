@@ -418,7 +418,13 @@ established practice — ADCensus is the well-known instance.
 ### Cost aggregation
 
 Summing or filtering each candidate's score over a neighbourhood, so the decision
-rests on a region's evidence rather than one pixel's. It is the third stage of the
+rests on a region's evidence rather than one pixel's:
+
+$$\tilde{C}(x, y, d) \;=\; \sum_{(u,v)} w\big((x,y),(u,v)\big) \; C(u, v, d)$$
+
+The sum runs over **positions**, at a fixed disparity $$d$$. It never averages across
+disparities, which is why the implementation needs a whole constant-disparity plane in
+memory and why two of Part 2's negative results follow from that one constraint. It is the third stage of the
 classical taxonomy and, on this project, the single largest accuracy lever: one
 7×7 Census comparison quantises to 49 levels, and Part 2 measured unaggregated
 scores at 28.1% bad against 12.7% for SGM stripped of its smoothness term
@@ -427,10 +433,22 @@ which is also why the cheap smoothness factor is a recorded negative result.
 
 ### Edge-aware recursive filter
 
-The aggregation actually used: a two-pass recurrence per axis whose per-pixel
-coefficient shrinks where the image gradient is large, so support stops at
-intensity edges instead of blurring across depth boundaries. Its cost is $$O(1)$$
-per pixel independently of support size, which is why the support can be large. The
+The aggregation actually used. Each pass mixes a pixel's own score with the running
+value from its neighbour,
+
+$$F_x \;=\; (1 - a_x)\, C_x \;+\; a_x F_{x-1}$$
+
+run four times over the plane: left, right, down, up. The coefficient shrinks where
+the image brightness changes, so support stops at intensity edges instead of blurring
+across depth boundaries:
+
+$$a \;=\; \exp\!\left(-\frac{\sqrt{2}}{\sigma_s}\left(1 + \frac{\sigma_s}{\sigma_r}\cdot\frac{|\Delta I|}{255}\right)\right)$$
+
+On a flat surface $$a$$ is constant, so a pixel $$k$$ steps away contributes $$a^k$$
+and the weight falls to $$1/e$$ after $$\sigma_s/\sqrt{2}$$ pixels — 5.7 px at the
+shipping $$\sigma_s = 8$$. Each pass is one multiply-add per pixel, so the cost is
+$$O(1)$$ per pixel whatever the reach, which is why the reach can be large and why
+$$\sigma_s$$ is free to tune. The
 family it belongs to is the domain-transform and non-local aggregation line of
 work; the exact recurrence, the integer coefficients and the truncation matter here
 because Part 3 reproduces them bit-for-bit on the GPU.

@@ -163,7 +163,7 @@ In the dense formulation, $$E = 2$$ per pixel — the two best candidates out of
 aggregated volume — so a 450-pixel row carries ~900 edges instead of the ~200,000
 cells of its full matrix. Why two is the right number is measured in Part 2: keeping
 eight candidates per pixel is measurably *worse* than keeping two, because the extra
-candidates are noise the solver has to argue with.
+candidates are noise, and the solver has to weigh them against the real ones.
 
 ### 1.3 The score
 
@@ -638,7 +638,7 @@ crosses nothing at all.
 **[Jonker-Volgenant / Hungarian](/masda-glossary/#jonker-volgenant-and-the-hungarian-method).**
 Exact, $$O(N^3)$$, and here exactly as good as
 MASDA where it can be run at all ([section 4.2](#42-against-the-exact-optimum)).
-For a pure assignment problem of moderate size, use it. MASDA earns its place on
+For a pure assignment problem of moderate size, use it. MASDA is the better choice on
 speed at scale — 6.4× in NumPy, far more engineered — and when you intend to add
 factors that stop the problem being a LAP.
 
@@ -669,7 +669,7 @@ and the direct
 competitor now that this formulation is dense too. SGM aggregates
 [smoothness](/masda-glossary/#smoothness-prior)
 along scanline paths and has **no uniqueness constraint at all** — a
-[left-right consistency check](/masda-glossary/#left-right-consistency-check) is bolted on
+[left-right consistency check](/masda-glossary/#left-right-consistency-check) is added afterwards
 afterwards, which costs a second matcher run.
 MASDA gets mutual exclusivity inside the inference, in one run, plus a per-pixel
 confidence (the [margin](/masda-glossary/#margin-and-the-margin-gate)) as a by-product. Measured head-to-head in Part 2:
@@ -780,10 +780,10 @@ the engineered pipeline, and unlike a coarse pass, the prior is free.
 
 A caveat on all of the above: eight scenes at 450×375 is not a benchmark, and the
 specific figures are what this code did on these scenes. What I would expect to
-generalise is the shape: uniqueness pays in proportion to ambiguity, loopy
-max-sum matches exact inference on precision while violating its guarantee's
-conditions, and the representation — not the mathematics — decides whether any
-of it is usable.
+generalise is the shape of the result. Uniqueness pays in proportion to how
+ambiguous the scene is. Loopy max-sum matches exact inference on precision, even
+though the conditions of its guarantee are violated. And the representation — not
+the mathematics — decides whether any of it is usable.
 
 ---
 

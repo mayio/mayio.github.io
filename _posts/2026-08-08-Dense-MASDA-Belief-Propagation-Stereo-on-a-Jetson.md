@@ -55,6 +55,110 @@ The textbook pipeline materialises a $$W \times H \times D$$ [cost volume][gl-co
 half of each once the scores are [Q14][gl-q14] int16 — aggregates it, then reads it
 back to pick winners. I built that first, then measured what the solver actually consumes.
 
+### 1.1 What "aggregate" means here
+
+Aggregation is the stage that does most of the work, so it is worth being precise
+about it.
+
+**The problem it solves.** One pixel does not carry enough evidence to pick a
+disparity. A 7×7 [Census][gl-census] descriptor compares 48 neighbours, so the score
+between two pixels is a [Hamming distance][gl-hamming] between 0 and 48 — only 49
+possible values. On a surface with little texture, many disparities produce the same
+score, and the best one is often not the correct one.
+
+The effect is not marginal. On Teddy, taking each pixel's best *un*aggregated score
+lands within 1 px of the truth for **62.0%** of pixels; aggregating first takes that
+to **86.9%**. Panel (b) below is one such pixel: the per-pixel score peaks at
+$$d = 10$$ where the truth is 18.25, and after aggregation the peak sits at 18.
+
+**What the stage does.** For each disparity $$d$$, it replaces every score by a
+weighted average of the scores around it:
+
+$$\tilde{C}(x, y, d) \;=\; \sum_{(u,v)} w\big((x,y),(u,v)\big) \; C(u, v, d)$$
+
+Read the indices carefully, because one detail decides the whole design. The sum runs
+over **positions** $$(u,v)$$. The disparity $$d$$ is fixed. Aggregation averages a
+pixel with its spatial neighbours *at the same disparity*, and never across
+disparities. That is why the code needs a whole *disparity plane* — the entire image
+scored at one fixed $$d$$ — in memory at once, and it is the constraint behind two of
+the negative results later in this post.
+
+**The weights are not a fixed window.** Averaging across an object boundary is
+harmful: it pulls a foreground disparity onto the background behind it. So the weight
+between two neighbouring pixels shrinks when the image brightness changes between
+them. For a horizontal neighbour pair the coefficient is
+
+$$a \;=\; \exp\!\left(-\frac{\sqrt{2}}{\sigma_s}\left(1 + \frac{\sigma_s}{\sigma_r}\cdot\frac{|\Delta I|}{255}\right)\right)
+\;=\; \underbrace{e^{-\sqrt{2}/\sigma_s}}_{\text{how far support reaches}}\;\cdot\;
+\underbrace{e^{-\sqrt{2}\,|\Delta I| / (255\,\sigma_r)}}_{\text{how easily an edge stops it}}$$
+
+where $$|\Delta I|$$ is the brightness difference between the two pixels, in grey
+levels. The two knobs are separate: $$\sigma_s$$ sets the reach on a flat surface,
+$$\sigma_r$$ sets how large a brightness step has to be before support stops there.
+
+**How it is computed.** Not with a window. The filter is a first-order recurrence —
+each pixel mixes its own score with the running value from the previous pixel:
+
+$$F_x \;=\; (1 - a_x)\, C_x \;+\; a_x F_{x-1}$$
+
+This runs four times over the plane: left to right, right to left, top to bottom,
+bottom to top. Each pass costs **one multiply and one add per pixel**, and that cost
+does not depend on $$\sigma_s$$. A wider support is free. This is why the
+$$\sigma_s$$ sweep later in this post changes accuracy at no cost in time, and why a
+value that was too large could sit unnoticed.
+
+![aggregation](/assets/img/2026-08-08-Dense-MASDA_files/aggregate.png)
+
+The reach is easy to read off the recurrence. On a flat surface $$a$$ is constant, so
+a pixel $$k$$ steps away contributes $$a^k = e^{-\sqrt{2}k/\sigma_s}$$. The weight
+falls to $$1/e$$ after $$k = \sigma_s/\sqrt{2}$$ pixels. At the shipping
+$$\sigma_s = 8$$ that is $$a = 0.838$$ and a reach of 5.7 px, with half weight
+already at 3.9 px. At a 30-grey-level edge with $$\sigma_r = 0.2$$ the coefficient
+drops to $$a = 0.36$$, so support dies about four times faster — which is what "the
+filter stops at edges" means numerically.
+
+The whole stage is about fifteen lines. This is the shipping filter, written in NumPy
+instead of C++:
+
+```python
+import numpy as np
+
+def coefficients(img, sigma_s=8.0, sigma_r=0.2):
+    """One coefficient per neighbour pair. Depends on the image only."""
+    k, rs = -np.sqrt(2) / sigma_s, sigma_s / sigma_r
+    img = img.astype(np.float32)
+    dx = np.abs(np.diff(img, axis=1, prepend=img[:, :1]))   # left neighbour
+    dy = np.abs(np.diff(img, axis=0, prepend=img[:1, :]))   # upper neighbour
+    return (np.exp(k * (1 + rs * dx / 255)),
+            np.exp(k * (1 + rs * dy / 255)))
+
+def aggregate(C, ax, ay):
+    """Filter ONE disparity plane in place. Four passes, O(1) per pixel."""
+    for x in range(1, C.shape[1]):              # left to right
+        C[:, x] += ax[:, x] * (C[:, x - 1] - C[:, x])
+    for x in range(C.shape[1] - 2, -1, -1):     # right to left
+        C[:, x] += ax[:, x + 1] * (C[:, x + 1] - C[:, x])
+    for y in range(1, C.shape[0]):              # top to bottom
+        C[y] += ay[y] * (C[y - 1] - C[y])
+    for y in range(C.shape[0] - 2, -1, -1):     # bottom to top
+        C[y] += ay[y + 1] * (C[y + 1] - C[y])
+    return C
+```
+
+Two notes on reading it. The updates are **in place and ordered**: `C[:, x - 1]` has
+already been overwritten by this pass, so it *is* $$F_{x-1}$$. And the backward pass
+uses `ax[:, x + 1]`, because a coefficient belongs to the pair of pixels it sits
+between, not to one pixel.
+
+Running this on the scored planes reproduces the C++ output to 0.001% of a plane's
+range, which is the [int16][gl-q14] rounding. The shipping version differs only in
+arithmetic: $$a$$ is stored as a `uint16` in Q15, and the recurrence multiplies into
+`int32` and stores back to `int16`. Those details are not cosmetic — [Part 3][p3]
+reproduces them bit for bit on the GPU, and that is what makes `cmp` a valid test
+there.
+
+### 1.2 How many candidates the solver needs
+
 **How many candidates per pixel does MASDA need?** Sweeping $$k$$, the number of
 top-scoring disparities kept per pixel, against the full volume:
 
@@ -62,8 +166,8 @@ top-scoring disparities kept per pixel, against the full volume:
 |---|---|---|---|---|---|---|
 | bad-1.0 | worse | **best** | = | = | = | = |
 
-Two — and $$k=2$$ was measurably better than $$k=8$$, because the extra candidates are
-noise the solver has to argue with. This is Part 1's precision-by-margin table
+Two — and $$k=2$$ was measurably better than $$k=8$$. The extra candidates are noise,
+and the solver has to weigh them against the real ones. This is Part 1's precision-by-margin table
 speaking again: the second-best candidate carries real information, since it defines
 the margin. The eighth carries none.
 
@@ -103,21 +207,33 @@ neighbours, with the vertex taken as the answer:
 
 Panel (c) is the reason this matters and the reason it went unnoticed for a long time.
 **A perfect integer disparity map scores 45.6% bad-1.0 on Middlebury v3 at quarter
-resolution, where a perfect floating-point one scores 0.8%.** The benchmark's threshold
-is one pixel of *full* resolution, which is a quarter of a pixel of what the matcher
-actually computes — and no integer answer can get inside a quarter-pixel threshold,
-however right it is. The matcher's own integer output measured 41.5%, which is close
+resolution. A perfect floating-point one scores 0.8%.** The reason is the threshold.
+The benchmark allows one pixel of error at *full* resolution, and the matcher works at
+quarter resolution, so the allowance is a quarter of a pixel in the matcher's own
+units. An integer answer can never land inside a quarter-pixel window, no matter how
+correct it is. The matcher's own integer output measured 41.5%, which is close
 to that 45.6% ceiling: the matching was already good, and the output format was
 throwing it away.
 
 With the fit: **41.5% → 24.5%, at coverage that does not move** — 17 points. The fit
 changes values, never decisions.
 
-**The estimator matters as much as having one.** The obvious choice is a parabola
-through the three samples, and it is the wrong shape for this cost. The graded score
-blends Census with a *truncated absolute difference*, which is piecewise linear, so
-the surface around the winner is locally a **V** rather than a bowl. The equiangular
-estimator — the standard one for a V — is the same arithmetic and no extra memory:
+**The estimator matters as much as having one.** Write $$c_0$$ for the score at the
+winning disparity and $$c_{-1}, c_{+1}$$ for its two neighbours. Fitting a parabola
+through the three and taking its vertex gives an offset
+
+$$\delta \;=\; \frac{1}{2}\cdot\frac{c_{+1} - c_{-1}}{2c_0 - c_{-1} - c_{+1}}$$
+
+and the answer is $$d + \delta$$, clamped to $$|\delta| \le \tfrac{1}{2}$$. A
+parabola is the wrong shape for this cost. The graded score blends Census with a
+*truncated absolute difference*, which is piecewise linear, so the surface around the
+winner is locally a **V** rather than a bowl. Fitting two straight lines of equal and
+opposite slope instead — the equiangular estimator, the standard one for a V — changes
+only the denominator:
+
+$$\delta \;=\; \frac{1}{2}\cdot\frac{c_{+1} - c_{-1}}{c_0 - \min(c_{-1},\, c_{+1})}$$
+
+Same three samples, same one line of code, no extra memory:
 
 | estimator | bad-1.0 | coverage |
 |---|---|---|
@@ -130,7 +246,7 @@ estimator — the standard one for a V — is the same arithmetic and no extra m
 fitting on the Census term while *selecting* on the graded cost would collect the
 rest, at the price of a second filtered plane. Not built.
 
-Two things about the implementation are worth the space.
+Two implementation details matter enough to describe.
 
 **Getting the neighbours back.** The whole point of [never building the volume](#1-the-cost-volume-is-never-built)
 is that the filtered cost volume does not exist, so the two costs the fit needs are gone by the time the winner
@@ -144,9 +260,9 @@ $$W - 6 - d$$ and shrinks as $$d$$ grows; equal plane counts would leave the low
 worker holding the most.
 
 **It costs 1.30× on the CPU.** The three-wide window and the coarser work quantum both
-land on the cost stage. The first version was 1.53× and I fixed the wrong half of it
-first: double-buffering removed the extra store and barely moved the wall clock,
-because the store was never the constraint — the chunked scheduler was. 16-plane chunks
+land on the cost stage. The first version cost 1.53×, and I fixed the wrong half
+of it first. Double-buffering removed the extra store and barely changed the wall
+clock, because the store was never the constraint. The chunked scheduler was. 16-plane chunks
 at $$D=60$$ is four chunks for six threads, so two threads got nothing and occupancy
 fell from 5.3 of 6 cores to 3.7. That is worth more than the arithmetic it saved.
 
@@ -165,8 +281,8 @@ disparities multiplied by four and its errors with them.
 
 That trap is worth stating precisely, because the first evaluator I wrote fell into it.
 Scoring a quarter-resolution result against quarter-resolution ground truth at bad-1.0
-gives **13.0% where the leaderboard says 37.3%** for the same data — a 2.9× flattery,
-and a completely plausible-looking number. What caught it was scoring Middlebury's own
+gives **13.0% where the leaderboard says 37.3%** for the same data. That is 2.9× too
+good, and it looks entirely plausible. What caught it was scoring Middlebury's own
 published SGM output, which ships with the dataset and has a known row on the public
 table. An evaluator that cannot reproduce a known result is not evidence about
 anything. Mine now reproduces it to 37.33 against 37.3 and refuses to run if it stops.
@@ -353,15 +469,16 @@ the similarity function itself.
 
 **And one flag does nothing at all.** `--agg`, the aggregation radius, produces
 identical output at 3, 7 and its default, because the recursive filter ignores it. It
-survives as a flag because an older box-filter path read it. Worth stating rather than
-leaving for someone to sweep.
+still exists as a flag because an older box-filter path used it. Stated here so that
+nobody sweeps it and wonders why nothing changes.
 
 ## 8. The ablation: the message passing is not what makes this work
 
 The matcher is named after an inference algorithm, so the obvious question is what that
-inference contributes. Disabling the message passing leaves everything else in place —
-the candidate set, the one-to-one decode, the margin, the gate — and decides by score
-alone, which is [winner-take-all][gl-wta] under a uniqueness constraint:
+inference contributes. Disabling the message passing leaves everything else
+in place: the candidate set, the one-to-one decode, the margin and the gate. The
+decision is then made by score alone. That is [winner-take-all][gl-wta] with a
+uniqueness constraint on top:
 
 | iterations | K = 2 (ships) | | K = 8 | |
 |---|---|---|---|---|
@@ -385,7 +502,7 @@ inverted objective, and it would have been an easy number to publish.
 What this does *not* say is that MASDA is doing nothing. The parts that survive the
 ablation are the parts that distinguish this from a block matcher: the one-to-one
 constraint, which SGM does not have at all and needs a [left-right consistency
-check][gl-lrc] bolted on to approximate, and the margin, which is what a downstream
+check][gl-lrc] added afterwards to approximate, and the margin, which is what a downstream
 consumer gates on. Both are present in every row of that table. What is in question is
 the loopy belief propagation on top of a *two-candidate* set, which is the case where
 it has the least to decide. The sparse matcher's advantage in Part 1 was measured with
@@ -393,11 +510,12 @@ many candidates on deliberately ambiguous projected-dot texture, and temporal
 association — where the candidate set is genuinely large and two-dimensional — has not
 been tested. Message passing is off by default in the dense path and one flag away.
 
-The camera adds a detail the benchmark cannot show. On a live scene where part of the
-floor fell outside the search range — so those pixels had no correct answer available —
-the iteration count moved coverage from 88.3% to 90.0% and moved the number of points
-on a demonstrably false surface from 242 to 473, concentrated in the strip where the
-correct match lies off the edge of the right image. The extra coverage is partly
+The camera adds a detail the benchmark cannot show. Take a live scene where part of the floor
+falls outside the search range, so those pixels have no correct answer available at
+all. Raising the iteration count moves coverage from 88.3% to 90.0%. It also moves the
+number of points sitting on a demonstrably false surface from 242 to 473, and the extra
+ones are concentrated in the strip where the correct match lies off the edge of the
+right image. The extra coverage is partly
 coverage of pixels that cannot be answered: message passing propagates support along
 the row, and where no correct answer exists it propagates the wrong one and raises its
 confidence. **A one-to-one constraint does not reject an occluded pixel when the true
@@ -412,7 +530,7 @@ built, which is the only reason the list is short.
 published CPU matcher avoids the exhaustive sweep: [ELAS][gl-elas] triangulates support
 points, [PatchMatch][gl-patchmatch] propagates hypotheses, [rSGM][gl-rsgm] subsamples.
 The ceiling is real — if each 16×16 tile knew which disparities its pixels needed, it
-would compute 19.2% of the sweep. Three things ate it:
+would compute 19.2% of the sweep. Three things consume that saving:
 
 1. *Per-pixel restriction is illegal here.* The filter aggregates over a plane, so a
    plane must hold one constant disparity. Restriction has to be per-tile, so that
@@ -421,7 +539,7 @@ would compute 19.2% of the sweep. Three things ate it:
    predicts tile ranges at 20.9% of the sweep — essentially at the oracle's cost — but
    with 90.7% recall, meaning one true disparity in eleven falls outside its tile's
    band. Reaching a usable recall costs most of the saving.
-3. *The aggregation has to be fed.* A tile can only skip a plane if it also skips it
+3. *The aggregation needs its input.* A tile can only skip a plane if it also skips it
    for the pixels the filter reads, and the filter reaches ~16 px. A 16×16 tile wanting
    one plane costs a 48×48 patch of it. That takes 26.3% to 53.8%.
 
@@ -463,7 +581,7 @@ cleverly you restrict it, and both of these experiments restricted it cleverly.
 
 At the camera's 848×480 the CPU matcher is a 5 Hz matcher, and the solve — the part
 that is MASDA — is memory-bound rather than arithmetic-bound. Two structural properties
-say where it goes next, and neither is a CPU optimisation: disparity planes are
+say where it goes next, and neither is a CPU optimisation. Disparity planes are
 independent, rows are independent, and the solver is two [strided
 reductions][gl-segred]. That is a description of a CUDA kernel, and the TX2's GPU sits
 at load zero through everything above.
@@ -552,4 +670,5 @@ Full citations with DOIs, and every term this post uses, are in the
 [gl-espresso]: https://www.mariolueder.com/masda-glossary/#espresso
 [gl-icsg]: https://www.mariolueder.com/masda-glossary/#intrinsic-curves
 [gl-tx2]: https://www.mariolueder.com/masda-glossary/#jetson-tx2
+[gl-hamming]: https://www.mariolueder.com/masda-glossary/#hamming-distance-and-popcount
 [gl-q14]: https://www.mariolueder.com/masda-glossary/#q14-fixed-point
