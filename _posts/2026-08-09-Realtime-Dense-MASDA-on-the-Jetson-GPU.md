@@ -25,28 +25,31 @@ layout, and the memory layout is where the surprise is.
 message equations; [Part 2][p2] is the matcher this post makes real-time.*
 
 Here is what it produces on the camera it is built for — the [D435 IR pair][gl-d435] —
-in one kitchen, under the four conditions that matter:
+in one kitchen at three light levels:
 
 ![real pair](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/real_pair.png)
 
-Read the last column first. With the room dark and the projector off, the image is
-sensor noise and nothing else: 0.12 DN of median local contrast, and a disparity map
-that is speckle at 38.6% coverage. Switch the projector on in the same darkness and
-the same code answers **88.1%**.
+Read the bottom-left panel first. At night with no lamp and the projector off, the
+image is sensor noise and nothing else: 0.12 DN of median local contrast, and a
+disparity map that is speckle at 38.6% coverage. Switch the projector on in the same
+darkness and the same code answers **88.1%**.
 
-With the lights on, the projector looks nearly unnecessary — 84.7% against 81.1%, a
-difference of 3.6 points — because the room's own light already puts texture on a
-tiled floor and a run of cabinet fronts. That is the shape of it: **room light is a
-flood illuminator and the projector is a texture source.** The matcher needs the
-second one, and only shows you that when the first is taken away.
+The middle row is the point of the whole figure. With the projector on, the matcher
+barely notices the light level at all — 88.1%, 87.8%, 84.7% across a 4.5× range of
+scene brightness. Without it, coverage is whatever the room happens to provide:
+38.6%, 80.1%, 81.1%. **What the projector is worth is exactly what the room does not
+already supply** — 49.5 points at night, 7.7 in the evening, 3.6 in the morning.
 
-The best of the four is the dark room with the projector on, which is not the
-expected answer. A lit room forces a shorter exposure and still clips 8.6% of the
-frame, and a saturated pixel carries no texture at all.
+The trend in the middle row runs the wrong way, and that is worth stating: more
+ambient light makes the projector-lit result slightly *worse*, 88.1% down to 84.7%.
+Brighter rooms force a shorter exposure and still clip more of the frame — 0%, 3.4%,
+8.6% of pixels at 255 — and a saturated pixel carries no texture at all. The brightest
+column is a lamp plus morning daylight through a window, which is the condition a
+vehicle would meet outdoors, and it is the worst of the three for this matcher.
 
-Exposure is set per condition — 1500 µs lit, 4000 µs dark — each being the value that
-holds 3–5 DN of local contrast in that room. One fixed exposure across both would
-measure the exposure rather than the projector.
+Exposure is set per condition — 4000, 2500 and 1500 µs — each being the value that
+holds 3–5 DN of local contrast in that room. One fixed exposure across a 4.5× range of
+brightness would have measured the exposure rather than the projector.
 
 Those dots also make the Census descriptors **3.3× degenerate** on this camera: 338
 distinct codes for 1115 keypoints, so many pixels are indistinguishable from one
