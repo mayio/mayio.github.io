@@ -3,7 +3,7 @@ layout: post
 title: 'Stereo Confidence: Which Depth Points Can You Trust?'
 subtitle: 'A per-pixel confidence for stereo matching, built from two numbers the matcher already has. The peak ratio, the left-right consistency check, the sparsification curve, and why the calibration that fits best is the one you must not ship.'
 thumbnail-img: /assets/img/2026-08-13-Stereo-Confidence_files/thumb_conf.png
-date: '2026-08-13 01:00:00 +0200'
+date: '2026-08-13 00:20:00 +0200'
 categories: stereo
 comments: false
 mathjax: true
