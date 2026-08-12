@@ -183,6 +183,106 @@ own.** A cache hierarchy with 512 KB of shared L2 wants one plane at a time, res
 A latency-hiding machine with 32-wide transactions wants the innermost index to be the
 one the warp spans. Trying to make one implementation serve both was the actual mistake.
 
+### 4.1 What one lane actually does
+
+The whole design fits in one kernel. A block covers 64 disparities of one image row,
+a thread owns a single disparity, and that thread walks the row from left to right
+computing the cost and running the horizontal filter as it goes:
+
+```cuda
+// grid: (H rows, D/64 disparity blocks).  blockDim.x = 64 -> two warps.
+__global__ void score_and_forward_filter(
+    const uint64_t* cl, const uint64_t* cr,   // census, left and right
+    const uint8_t*  L,  const uint8_t*  R,    // raw grey, for the AD term
+    const uint16_t* ax,                       // filter coefficient, per pixel
+    int16_t* vol, int W, int D, int Dpad, int dmin, int32_t wq)
+{
+  const int lane = threadIdx.x & 31;
+  const int y    = blockIdx.x;                            // one row per block
+  const int k    = blockIdx.y * 64 + (threadIdx.x >> 5) * 32 + lane;
+  const int d    = dmin + k;                              // THIS lane's disparity
+
+  const uint64_t* clr = cl + (size_t)y * W;
+  const uint64_t* crr = cr + (size_t)y * W;
+  int32_t F = 0;                                          // this lane's recurrence
+
+  for (int x = 0; x < W; ++x) {
+    int32_t v = 0;
+    if (k < D && x >= 3 + d && x < W - 3) {
+      const int32_t c = tbl[__popcll(clr[x] ^ crr[x - d])];      // Census, 0..48
+      const int32_t a = adt[abs(int(L[y*W + x]) - int(R[y*W + x - d]))];
+      v = (c * (1024 - wq) + a * wq) >> 10;                      // graded cost, Q14
+    }
+    F = (x == 0) ? v                                             // the filter, fused
+                 : v + ((ax[y*W + x] * (F - v) + (1 << 14)) >> 15);
+    if (k < D) vol[((size_t)y * W + x) * Dpad + k] = (int16_t)F;
+  }
+}
+```
+
+Two lines carry the entire argument for this layout. `F` is a **register**, so the
+edge-aware filter — the awkward, sequential part of the algorithm — needs no shared
+memory, no shuffles and no synchronisation: 32 independent recurrences run side by
+side because they are 32 different disparities of the same row. And the score is never
+stored before it is filtered. `v` is consumed by the recurrence in the same
+instruction stream that produced it, which is the fusion that deletes a 52 MB round
+trip through DRAM.
+
+![warp](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/warp.png)
+
+The addresses are worth doing once, because "coalesced" is a claim and this is the
+arithmetic behind it. With $$D_{\text{pad}} = 64$$, a pixel's disparity run is
+$$64 \times 2 = 128$$ bytes and starts on a 128-byte boundary:
+
+- **the write**, `vol[(y·W + x)·64 + k]` for 32 consecutive $$k$$: 32 int16 at
+  consecutive addresses — one aligned 64-byte transaction, for the whole warp;
+- **the right census**, `crr[x - d]` for $$d = d_0 \dots d_0+31$$: 32 consecutive
+  `uint64` — a 256-byte window that slides by exactly one element when $$x$$
+  advances, so it stays in L1;
+- **everything else** — `clr[x]`, `L[x]`, `ax[x]` — is the *same* address in all 32
+  lanes, which the hardware serves as a broadcast rather than 32 loads.
+
+### 4.2 How the top-2 comes out of the warp
+
+The solver wants two candidates per pixel, and after the vertical backward pass the
+64 filtered costs of a pixel are spread across the warp, two per lane. Getting the
+best two out is a reduction across lanes, done with `__shfl_down_sync` in five rounds:
+
+![shuffle](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/shuffle.png)
+
+The subtlety is the tie. The CPU walks $$k$$ ascending and needs a *strictly* greater
+score to displace the incumbent, so among equal scores the smallest $$k$$ wins. The
+warp does not walk anything in order — lane 0 absorbs lane 16 before it absorbs lane
+1 — so a rule like "the other side holds the larger disparities" is simply false in
+the middle of the tree.
+
+The fix is to stop breaking ties at all, by putting $$k$$ into the sort key:
+
+$$\text{key}(s, k) \;=\; \big(s + 32768\big) \cdot 256 \;+\; \big(255 - k\big)$$
+
+The score occupies the high bits and $$255-k$$ the low eight, so a plain integer
+`>` *is* the ordering "score descending, then $$k$$ ascending". Two candidates that
+tie at $$s = 1000$$ give $$\text{key}(1000, 5) = 8{,}644{,}858$$ against
+$$\text{key}(1000, 17) = 8{,}644{,}846$$: the smaller disparity wins by construction,
+whichever lane it arrives from. The merge becomes order-independent, and it costs two
+shuffles per round instead of a comparison chain. Eight bits are enough for $$k$$
+because $$D$$ reaches 220 at its widest.
+
+`article/top2sim.py` reproduces the tree on the host in twenty lines and counts the
+disagreements against the CPU's scan:
+
+| distinct score values | value-only key | packed (score, $$k$$) |
+|---|---|---|
+| 3 | 44.09% | 0.00% |
+| 64 | 19.14% | 0.00% |
+| 1,024 | 1.27% | 0.00% |
+| 16,384 | 0.07% | 0.00% |
+
+Ties are the only case the two keys can disagree on, so the error rate is a direct
+function of how many of them there are. A real Q14 cost volume has few, which is why
+this bug arrived as **ten wrong pixels in 407,040** — nowhere near visible to an
+accuracy benchmark, and caught only because the GPU is held byte-identical to the CPU.
+
 ## 5. What the board delivers
 
 Measured steady state, pipelined over 30 frames, best of three at locked clocks:
@@ -230,11 +330,10 @@ question entirely:
 a lane per *disparity* rather than per *position* means every lane runs its own
 recurrence.
 
-**An ordered tie-break in the top-2 reduction: ten wrong pixels in 407,040.** The fused
-top-2 reduces across the warp with a `shfl_down` tree. That tree merges *non-adjacent*
-disparity ranges: lane 0 combines with lane 16 before it combines with lane 1. So any
-tie rule of the form "the other side holds the larger disparities" is false in the
-middle of the tree. Every one
+**An ordered tie-break in the top-2 reduction: ten wrong pixels in 407,040.** The
+mechanism and the fix are in [how the top-2 comes out of the warp](#42-how-the-top-2-comes-out-of-the-warp);
+the part that belongs here is that assuming an order across a shuffle tree is a
+mistake worth naming. Every one
 of the ten differing pixels was an exact score tie. A five-million-run host simulation
 of the precise shuffle tree reproduced it; the fix packs (value, $$k$$) into a single
 integer whose plain comparison is (value descending, $$k$$ ascending), which is
