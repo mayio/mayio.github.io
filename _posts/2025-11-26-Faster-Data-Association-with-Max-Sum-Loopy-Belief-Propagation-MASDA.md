@@ -29,29 +29,36 @@ Data association is a fundamental problem in many fields, particularly in roboti
 
 **Example 1: Measurement-to-Object Association**
 
-Consider a scenario in autonomous driving or surveillance where a vehicle is equipped with sensors (e.g., radar, lidar, camera) that detect objects in its environment. At each time step, these sensors generate a set of 'measurements' – detections of potential objects. Simultaneously, the system maintains a set of 'objects' (or tracks) that it believes exist and is currently monitoring. The core challenge of measurement-to-object association is to determine which new measurement corresponds to which existing object, or if a measurement represents a new, previously unobserved object (a 'birth'), or if an existing object was not detected in the current scan (a 'missed detection' or 'misdetection'), or if a measurement is spurious (e.g., 'clutter').
+Consider a scenario in autonomous driving or surveillance where a vehicle is equipped with sensors (e.g., radar, lidar, camera) that detect objects in its environment. At each time step, these sensors generate a set of 'measurements' – detections of potential objects. Simultaneously, the system maintains a set of 'objects' (or tracks) that it believes exist and is currently monitoring. The core challenge of measurement-to-object association is to decide, for each new measurement, which of four cases applies:
+
+- it corresponds to an existing object;
+- it is a new, previously unobserved object (a *birth*);
+- an existing object was not detected in this scan (a *missed detection*, or *misdetection*);
+- or the measurement is spurious (*clutter*).
 
 For example, suppose a radar detects a blob at a certain position. In that case, the data association algorithm must decide if this blob is the same car it measured in a previous scan, a newly appeared pedestrian, or just sensor noise. Incorrectly associating a new measurement with an old track can lead to track swapping, where the system believes it's still tracking the original object but is actually tracking a different one. This can have severe consequences, such as an autonomous vehicle mispredicting the behavior of surrounding traffic.
 
 **Example 2: Data Association in Simultaneous Localization and Mapping (SLAM)**
 
-In SLAM, a mobile robot or agent builds a map of an unknown environment while simultaneously estimating its own position within that map. Data association in SLAM is crucial for both map consistency and accurate localization. When a robot observes a feature (e.g., a corner, a door, a landmark) with its sensors, it needs to determine whether it corresponds to a feature already present in its growing map or is a new feature to be added. This is known as feature association or loop closure detection (when the robot revisits a previously mapped area).
+In SLAM, a mobile robot or agent builds a map of an unknown environment while simultaneously estimating its own position within that map. Data association in SLAM is crucial for both map consistency and accurate localization. A robot observes a feature with its sensors: a corner, a door, a landmark. It then has to decide whether that feature is already present in its growing map, or is a new one to be added. This is known as feature association or loop closure detection (when the robot revisits a previously mapped area).
 
-If the robot incorrectly associates a newly observed feature with an existing map feature that is actually different, it can introduce significant errors into the map (e.g., duplicate features, skewed map geometry) and its own estimated pose. Conversely, if it fails to associate a revisited feature, it might incorrectly believe it's in a new area, leading to an ever-growing, inconsistent map. Correct data association is paramount for closing loops in the map and maintaining a globally consistent representation of the environment.
+Suppose the robot associates a newly observed feature with an existing map feature that is actually a different one. That introduces errors into both the map and its own estimated pose: duplicate features, and skewed map geometry. Conversely, if it fails to associate a revisited feature, it might incorrectly believe it's in a new area, leading to an ever-growing, inconsistent map. Correct data association is paramount for closing loops in the map and maintaining a globally consistent representation of the environment.
 
-Data association algorithms are also needed in other fields, such as medicine, statistics, biology, and weather forecasting, to name a few. As the terminology differs in those fields, I will stick to the terms *measurements* and *detections* for the entities that describe the state of the system perceived without prior knowledge from a previous scan. These might be raw measurements, such as positions, or already processed data, such as clusters and features. Objects describe an accumulated, maybe "learned" state or just a previous state of the system. In a multi-sensor setup, with overlapping fields of view, where multiple scans shall be matched to each other, the term "measurements" might describe the data coming from one sensor, and the term "objects" describes the data received from another.
+Data association algorithms are also needed in other fields, such as medicine, statistics, biology, and weather forecasting, to name a few. The terminology differs in those fields. This article uses *measurements* and *detections* throughout, for the entities describing a state of the system perceived without prior knowledge from a previous scan. These might be raw measurements, such as positions, or already processed data, such as clusters and features. Objects describe an accumulated, maybe "learned" state or just a previous state of the system. The two words can also separate two sensors rather than two times. In a multi-sensor setup with overlapping fields of view, "measurements" may be the data from one sensor and "objects" the data from another.
 
 Objects and measurements are considered throughout this article as independent and identically distributed (i.i.d.).
 
 **Hungarian-Derived Algorithms**
 
-Hungarian-derived algorithms (e.g., the Munkres algorithm for the Assignment Problem) are classic methods for solving optimal assignment problems, which can be framed as a data association task where the goal is to find a one-to-one mapping between two sets of items to minimize total cost or maximize total similarity. While powerful, their computational complexity grows in many applications too large.
+Hungarian-derived algorithms are the classic methods for solving optimal assignment problems. The Munkres algorithm for the Assignment Problem is the usual example.
+
+Data association can be framed as exactly that task: find a one-to-one mapping between two sets of items, minimising total cost or maximising total similarity. These algorithms are powerful, and in many applications their computational complexity grows too large.
 
 The standard Hungarian algorithm has a polynomial time complexity, typically O(N^3) for N items. In scenarios with a large number of measurements and objects, or when running in real-time on resource-constrained systems, this can be computationally prohibitive. Real-world applications often involve hundreds or thousands of potential associations.
 
 **The Jonker-Volgenant Algorithm**
 
-The Jonker-Volgenant Algorithm was developed to improve upon the Hungarian Algorithm and is now the preferred method for solving the Linear Assignment Problem (LAP) for large, square cost matrices. Complexity: Although both algorithms can achieve a theoretical worst-case time complexity of $$O(n^3)$$ (where $$n$$ is the number of rows/columns of the cost matrix) in their improved versions, the Jonker-Volgenant method was fundamentally designed to be practically more efficient.
+The Jonker-Volgenant Algorithm was developed to improve upon the Hungarian Algorithm and is now the preferred method for solving the Linear Assignment Problem (LAP) for large, square cost matrices. Both algorithms reach a theoretical worst-case time complexity of $$O(n^3)$$ in their improved versions. Here $$n$$ is the number of rows or columns of the cost matrix. The Jonker-Volgenant method was nevertheless designed to be practically faster.
 
 ## Factor Graphs for Data Association
 
@@ -71,23 +78,23 @@ Factor graphs explicitly show the dependencies between variables. In data associ
 
 Factor graphs are the natural framework for message-passing algorithms like Max-Sum (used in MASDA) or Sum-Product (used in SPADA). These iterative algorithms allow local information (messages) to propagate throughout the graph, enabling the system to infer global states (the best assignment) by combining local preferences and constraints. This is often more scalable and robust than traditional methods that might struggle with the combinatorial explosion of possibilities.
 
-Data association is inherently a combinatorial problem. Factor graphs, along with message-passing algorithms, offer an efficient (though often approximate for loopy graphs) way to search this vast space for optimal or near-optimal solutions, by avoiding the need to enumerate all possible assignments.
+Data association is inherently a combinatorial problem. Factor graphs and message-passing algorithms search that space for optimal or near-optimal solutions without enumerating every possible assignment, which is efficient, and on loopy graphs usually approximate.
 
 Factor graphs can seamlessly integrate various types of information, including:
 
   * Unary potentials: Costs/similarities for individual assignments ($$S_{ij}$$), clutter ($$\Lambda_i$$), or misdetections ($$\Gamma_j$$).
-  * High-order potentials/constraints: Complex relationships involving multiple variables, such as the mutual exclusivity constraints ($$I_i$$ and $$E_j$$) that ensure each measurement associates with at most one object/clutter, and each object associates with at most one measurement/misdetection.
+  * High-order potentials and constraints: relationships involving several variables at once. The mutual exclusivity constraints $$I_i$$ and $$E_j$$ are the ones used here. $$I_i$$ ensures each measurement associates with at most one object or with clutter; $$E_j$$ ensures each object associates with at most one measurement or with a misdetection.
 
 Depending on the message-passing algorithm used:
 
   * Max-Sum (MASDA) can find the Maximum A Posteriori (MAP) assignment, giving you the single most likely set of associations.
   * Sum-Product (SPADA) can compute marginal probabilities for each possible association, providing a rich, probabilistic understanding of the uncertainty in the assignments, which is crucial for robust decision-making in real-world systems.
 
-Factor graphs provide a powerful, flexible, and mathematically rigorous framework for modeling data association problems, allowing for the application of efficient inference algorithms that can handle complex constraints and deliver either a single optimal assignment or a full probabilistic understanding of potential associations.
+Factor graphs are a flexible and mathematically rigorous framework for modelling data association. They admit efficient inference algorithms that handle complex constraints. Those algorithms deliver either a single optimal assignment, or a full probabilistic account of the possible associations.
 
 ### SPADA (Sum Product Algorithm Data Association) and MASDA (Max-Sum Algorithm Data Association)
 
-SPADA is a method for solving data association problems using the Sum-Product Algorithm (SPA), also known as Belief Propagation. While the Max-Sum algorithm (which this page is demonstrating below) aims to find the single best assignment (the maximum a posteriori or MAP estimate), the Sum-Product Algorithm aims to compute marginal probabilities for each possible assignment. This means SPADA provides a more complete probabilistic understanding of the associations at the cost of higher computational efforts.
+SPADA is a method for solving data association problems using the Sum-Product Algorithm (SPA), also known as Belief Propagation. The Max-Sum algorithm, demonstrated below, finds the single best assignment: the maximum a posteriori, or MAP, estimate. The Sum-Product Algorithm instead computes a marginal probability for every possible assignment. SPADA therefore gives a more complete probabilistic account of the associations, at the cost of more computation.
 
 *Here's a breakdown:*
 
@@ -104,15 +111,21 @@ In the Sum-Product Algorithm, messages are typically represented as functions (o
 
 **Variable-to-Factor Messages:** A message from a variable node to a factor node is the product of all incoming messages from other factor nodes connected to that variable.
 
-**Factor-to-Variable Messages:** A message from a factor node to a variable node is computed by taking the product of the factor's function with all incoming messages from other variable nodes connected to that factor, and then summing (or integrating) over all variables except the recipient variable.
-The 'sum' in Sum-Product refers to this marginalization step, contrasting with the 'max' in Max-Sum where maximization is performed.
+**Factor-to-Variable Messages:** a message from a factor node to a variable node is computed in two steps.
+
+1. Multiply the factor's function by every incoming message from the other variable nodes connected to that factor.
+2. Sum, or integrate, over all variables except the recipient.
+
+The 'sum' in Sum-Product is that second step. Max-Sum maximises there instead, which is its 'max'.
 
 Messages are iteratively passed until they converge (or for a fixed number of iterations). Once messages converge, the belief (or marginal probability distribution) for each variable node can be computed by multiplying all messages received by that variable node.
 These beliefs represent the marginal probabilities of each possible association (e.g., $$P(c_{ij}=1)$$, $$P(e_i=1)$$, $$P(d_j=1)$$).
 
 *Key Differences from Max-Sum (MASDA)*
 
-Max-Sum aims for MAP (most likely assignment), SPADA aims for marginal probabilities. Therefor Max-Sum uses max and sum operations while SPADA uses sum and product operations (or log-sum-exp and sum in the log-domain to prevent underflow and allow for the benefits of addition instead of multiplication).
+Max-Sum aims for the MAP assignment, SPADA for marginal probabilities. Therefore Max-Sum uses max and sum operations, while SPADA uses sum and product operations.
+
+In the log-domain SPADA uses log-sum-exp and sum instead. That prevents underflow, and it replaces multiplication with addition.
 Max-Sum typically gives a hard assignment (0 or 1 for each $$c_{ij}$$). SPADA provides probabilities (values between 0 and 1) for each association.
 SPADA's probabilistic output can be more robust in ambiguous situations, as it quantifies the uncertainty of each association.
 
@@ -123,7 +136,7 @@ SPADA provides a richer understanding of the association uncertainty, which can 
 *Applications*
 
 SPADA is used in various data association contexts, particularly where a nuanced, probabilistic understanding of associations is required. This includes multi-target tracking, sensor fusion, and certain aspects of SLAM where evaluating the likelihood of different map updates is important.
-In essence, while the Max-Sum algorithm helps you find the best way to associate measurements to objects, SPADA helps you understand how likely each possible association is, offering a more complete picture of the uncertainty in the system.
+In short: Max-Sum finds the best way to associate measurements with objects. SPADA says how likely each possible association is, which is a more complete picture of the uncertainty in the system.
 
 
 ## MASDA
@@ -215,7 +228,11 @@ $$
 \mu_{x\rightarrow f}(x) = \sum_{\{l|f_l \in \text{ne}(x) \setminus f\}}\mu_{f_l\rightarrow x}(x)
 $$
 
-**Factor-to-Variable Messages:** A factor node $$f$$ sends a message to a variable node $$x$$ by taking the maximum over all possible assignments of its other connected variables, adding its own function value, and summing all messages from other variables (excluding $$x$$).
+**Factor-to-Variable Messages:** a factor node $$f$$ sends a message to a variable node $$x$$ in three steps.
+
+1. Sum the messages from the other variables connected to $$f$$, excluding $$x$$.
+2. Add $$f$$'s own function value.
+3. Take the maximum over all possible assignments of those other variables.
 
 $$
 \mu_{f_l\rightarrow x}(x) = \max_{x_1,\dots,x_M}\left[f(x, x_1, \dots, x_m) + \sum_{\{m|x_m \in \text{ne}(f) \setminus x\}}\right]
@@ -485,7 +502,7 @@ This complexity holds when you have a well-defined cost matrix and are seeking a
 
 MASDA is an iterative inference algorithm, a form of Belief Propagation. Its complexity, similar to SPADA, depends on the graph structure and the number of iterations.
 
-In a data association factor graph with $$M$$ measurements and $$N$$ objects, computing messages for MASDA involves performing 'max' operations over the neighbors of each node. The complexity per iteration is roughly proportional to the number of edges and the number of states a variable can take within a factor, often scaling similarly to O(M * N * K), where K is related to the maximum degree of nodes or the size of variable domains within factors.
+In a data association factor graph with $$M$$ measurements and $$N$$ objects, computing messages for MASDA involves performing 'max' operations over the neighbors of each node. The complexity per iteration is roughly proportional to two things: the number of edges, and the number of states a variable can take within a factor. That usually scales as O(M * N * K). Here K is related to the maximum degree of the nodes, or to the size of the variable domains within factors.
 
 When applied to loopy factor graphs (which are common in data association), is an approximate inference algorithm. It's not guaranteed to converge to the globally optimal MAP assignment, nor is it guaranteed to converge at all in all cases. In practice, it's typically run for a fixed number of iterations (e.g., T iterations). Thus, the total practical complexity becomes O(T * M * N * K).
 
@@ -495,18 +512,22 @@ Note that for our purpose of data association, K is set 1.
 
 JV provides a provably optimal solution for the Linear Assignment Problem. MASDA provides an approximate solution to the MAP problem on loopy graphs. While often very good in practice, its optimality is not guaranteed.
 
-MASDA's iterative, message-passing nature allows it to more naturally incorporate complex constraints (like the one-measurement-per-object and one-object-per-measurement constraints, along with clutter and misdetection) directly into the factor graph structure, without needing extensive matrix augmentation as JV often does.
+Because MASDA passes messages, complex constraints go directly into the factor graph structure. One measurement per object, one object per measurement, clutter and misdetection all enter that way, with none of the matrix augmentation JV usually needs.
 
-For pure LAP, JV's O(N^3) is very efficient for moderate N. However, for very large N (where N is the number of potential associations), if the factor graph for MASDA is sparse and only a small number of iterations T are needed, MASDA can offer better practical scaling for certain types of problems that JV would struggle to model directly without significant pre-processing or approximation.
+For a pure LAP, JV's O(N^3) is very efficient at moderate N. Here N is the number of potential associations.
 
-In essence, if your data association problem can be accurately and effectively framed as a pure Linear Assignment Problem, the Jonker-Volgenant algorithm will provide a guaranteed optimal solution. However, if the problem involves more complex probabilistic dependencies, non-strict one-to-one assignments, or requires intrinsic handling of clutter and misdetections without heavy augmentation, MASDA provides a flexible framework that can yield good approximate solutions, often with even faster runtime for a fixed number of iterations.
+At very large N, MASDA can scale better in practice, provided its factor graph is sparse and few iterations T are needed. That applies to problems JV would struggle to model directly without heavy pre-processing or approximation.
+
+In short: if the problem can be framed accurately as a pure Linear Assignment Problem, Jonker-Volgenant gives a guaranteed optimal solution.
+
+MASDA is the flexible alternative where that framing does not hold — more complex probabilistic dependencies, assignments that are not strictly one-to-one, or clutter and misdetection handled intrinsically rather than by augmentation. Its solutions are approximate, and at a fixed number of iterations it is often faster as well.
 
 ### Computational Complexity: MASDA vs. SPADA
 
 Both SPADA (Sum-Product Algorithm Data Association) and MASDA (Max-Sum Algorithm Data Association) are iterative message-passing algorithms operating on factor graphs.
 
 SPADA generally involves higher computational efforts compared to MASDA because it aims to compute marginal probabilities for each possible assignment, rather than just the single most likely assignment.
-While not explicitly stated with a formula in the provided text, its iterative nature on a factor graph would lead to a similar structure of complexity per iteration as MASDA, but the 'sum' operations (or log-sum-exp in the log-domain) involved in marginalization are typically more demanding than the 'max' operations used in MASDA.
+No formula for it is derived here. Being iterative on a factor graph, SPADA has the same structure of complexity per iteration as MASDA. What differs is the operation: marginalisation needs 'sum', or log-sum-exp in the log-domain, and both are more demanding than MASDA's 'max'.
 The message computations in SPADA represent probability distributions, adding to the complexity compared to MASDA's scalar scores.
 
 ## Implementation
@@ -809,4 +830,4 @@ plt.show()
 
 A sensible association hypothesis was found by the algorithm, associating the top left measurements with the top left objects. The other two measurements were not associated, as there is no other object available in their vicinity. Thus, the bottom right object remains undetected.
 
-The computation of the similarities is too simplistic here to be considered a real-world example. One would incorporate uncertainties. Further, in a scenario with objects and measurements streaming from radar or a lidar, one would incorporate detection probabilities and clutter probabilities based on some functions that model the capabilities of the sensor and the environmental constraints.
+The computation of the similarities is too simplistic here to be considered a real-world example. One would incorporate uncertainties. Further, with objects and measurements streaming from a radar or a lidar, detection probabilities and clutter probabilities belong in the model too. Both come from functions describing what the sensor can do and what the environment constrains.
