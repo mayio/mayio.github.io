@@ -12,8 +12,8 @@ tags: [belief-propagation, data-association, computer-vision, embedded, cuda]
 ---
 
 This is the real-time implementation: [dense MASDA][p2] running on a
-[Jetson TX2][gl-tx2] at **31.7 ms per frame at 848×480** — the camera's full
-resolution, faster than the camera delivers frames — with the disparity map
+[Jetson TX2][gl-tx2] at **31.7 ms per frame at 848×480**. That is the camera's full
+resolution, and faster than the camera delivers frames. The disparity map is
 [bit-identical][gl-bitid] to the CPU matcher on all eight ground-truth scenes.
 
 The design question is not "which parts go on the GPU". It is that the matcher has two
@@ -29,9 +29,9 @@ in one kitchen at three light levels:
 
 ![real pair](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/real_pair.png)
 
-Read the bottom-left panel first. At night with no lamp and the projector off, the
-image is sensor noise and nothing else: 0.12 DN of median local contrast, and a
-disparity map that is speckle at 38.6% coverage. Switch the projector on in the same
+Read the *night, no lamp* column first, on its *projector off* row. With no lamp and
+no projector, the image is sensor noise and nothing else: 0.12 DN of median local
+contrast, and a disparity map that is speckle at 38.6% coverage. Switch the projector on in the same
 darkness and the same code answers **88.1%**.
 
 The middle row is the point of the whole figure. With the projector on, the matcher
@@ -108,11 +108,13 @@ allow — the recurrences genuinely need their intermediate planes.
 
 **The sub-pixel fit costs almost nothing on the GPU.** [Part 2][p2] describes the fit and what
 it is worth: 41.5% → 24.5% bad-1.0. On the CPU it costs 1.30×, because the two
-neighbouring costs have to be retained while streaming planes. On the GPU they are
-already in registers: the top-2 reduction has the whole disparity range of a pixel live
-across the warp at the moment the winner is known, so publishing the winner takes one
-broadcast and fetching its neighbours takes two shuffles. Measured cost: **1.10×**, and
-sending those neighbours to the host in Q14 rather than float halves the extra transfer.
+neighbouring costs have to be retained while streaming planes. On the GPU they are already in registers. At the moment the winner is known, the
+top-2 reduction has the whole disparity range of a pixel live across the warp.
+Publishing the winner then takes one broadcast, and fetching its neighbours takes two
+shuffles.
+
+Measured cost: **1.10×**. Sending those neighbours to the host in Q14 rather than
+float halves the extra transfer.
 
 ## 3. The pipeline, and where detection hides
 
@@ -128,25 +130,25 @@ fetcher blocks until frame $$t{+}1$$'s kernels finish and then copies — while 
 decode of frame $$t$$ is still on the A57s. Before this, the copy sat serially in the
 loop.
 
-**The decode threads pin themselves to the A57 cluster.** The TX2 has [four A57s and
-two Denver cores][gl-cores]; if the threads are not pinned, the scheduler moves them
-between the two clusters and the decode varies between 30 and 45 ms from run to run. Pinned, it sits within half a millisecond of its minimum.
+**The decode threads pin themselves to the A57 cluster.** The TX2 has [four A57s and two Denver cores][gl-cores]. Left unpinned, the threads
+get moved between the two clusters by the scheduler, and the decode varies between 30
+and 45 ms from run to run. Pinned, it sits within half a millisecond of its
+minimum.
 The Denvers are left to the CUDA driver and the fetcher. (The same change measured *40%
 worse* on the CPU-only matcher, which needs the Denvers for throughput. An optimisation
 is a measurement attached to a machine.)
 
 **Keypoint detection is a third thread, and it is free.** The system needs a sparse
 feature set as well as a dense map — for tracking and odometry — and detection is 29 ms
-of one core. Run inside the pipelined loop beside the decode, it costs **0.4–1.4 ms of
-frame time**, because it hides under the 26.9 ms of kernels. 97.3% of detected keypoints
-carry a disparity read straight out of the dense map.
+of one core. Run inside the pipelined loop beside the decode, it costs **0.4–1.4 ms of frame
+time**, because it hides under the 26.9 ms of kernels. 97.3% of detected keypoints
+then carry a disparity read straight out of the dense map.
 
 That last point is a result, not plumbing. Sampling the dense map at the keypoints
 beats running the sparse matcher on the same keypoints on every axis: **0.853 precision
-against 0.706, with 57% more correct matches**, and no matcher to run. The sparse
-matcher's recall is bounded by whether the *right* image's detector also fired within a
-pixel of the true correspondence — a 44–51% repeatability ceiling — and a dense map has
-no such requirement. One producer, two products.
+against 0.706, with 57% more correct matches**, and no matcher to run. The sparse matcher's recall is bounded by whether the *right* image's detector also
+fired within a pixel of the true correspondence, which is a 44–51% repeatability
+ceiling. A dense map has no such requirement. One producer, two products.
 
 None of this can be said unless detection is measured *inside* the pipelined loop.
 Measured outside it, the detection step appeared to cost nothing, and the frame rate
@@ -185,9 +187,9 @@ one the warp spans. Trying to make one implementation serve both was the actual 
 
 ### 4.1 What one lane actually does
 
-The whole design fits in one kernel. A block covers 64 disparities of one image row,
-a thread owns a single disparity, and that thread walks the row from left to right
-computing the cost and running the horizontal filter as it goes:
+The whole design fits in one kernel. A block covers 64 disparities of one image
+row, and a thread owns a single disparity. That thread walks the row from left to
+right, computing the cost and running the horizontal filter as it goes:
 
 ```cuda
 // grid: (H rows, D/64 disparity blocks).  blockDim.x = 64 -> two warps.
@@ -220,10 +222,12 @@ __global__ void score_and_forward_filter(
 }
 ```
 
-Two lines carry the entire argument for this layout. `F` is a **register**, so the
-edge-aware filter — the awkward, sequential part of the algorithm — needs no shared
-memory, no shuffles and no synchronisation: 32 independent recurrences run side by
-side because they are 32 different disparities of the same row. And the score is never
+Two lines carry the entire argument for this layout.
+
+`F` is a **register**. The edge-aware filter is the awkward, sequential part of the
+algorithm, and here it needs no shared memory, no shuffles and no synchronisation.
+32 independent recurrences run side by side, because they are 32 different
+disparities of the same row. And the score is never
 stored before it is filtered. `v` is consumed by the recurrence in the same
 instruction stream that produced it, which is the fusion that deletes a 52 MB round
 trip through DRAM.
@@ -251,10 +255,9 @@ best two out is a reduction across lanes, done with `__shfl_down_sync` in five r
 ![shuffle](/assets/img/2026-08-09-Realtime-Dense-MASDA_files/shuffle.png)
 
 The subtlety is the tie. The CPU walks $$k$$ ascending and needs a *strictly* greater
-score to displace the incumbent, so among equal scores the smallest $$k$$ wins. The
-warp does not walk anything in order — lane 0 absorbs lane 16 before it absorbs lane
-1 — so a rule like "the other side holds the larger disparities" is simply false in
-the middle of the tree.
+score to displace the incumbent, so among equal scores the smallest $$k$$ wins. The warp does not walk anything in order. Lane 0 absorbs lane 16 before it absorbs
+lane 1. So a rule like "the other side holds the larger disparities" is simply false
+in the middle of the tree.
 
 The fix is to stop breaking ties at all, by putting $$k$$ into the sort key:
 
@@ -279,9 +282,9 @@ disagreements against the CPU's scan:
 | 16,384 | 0.07% | 0.00% |
 
 Ties are the only case the two keys can disagree on, so the error rate is a direct
-function of how many of them there are. A real Q14 cost volume has few, which is why
-this bug arrived as **ten wrong pixels in 407,040** — nowhere near visible to an
-accuracy benchmark, and caught only because the GPU is held byte-identical to the CPU.
+function of how many of them there are. A real Q14 cost volume has few, which is why this bug arrived as **ten wrong pixels
+in 407,040**. That is nowhere near visible to an accuracy benchmark. It was caught
+only because the GPU is held byte-identical to the CPU.
 
 ## 5. What the board delivers
 
@@ -304,15 +307,16 @@ $$D=64$$ measures 25.6, while $$D=65$$ measures 41.8 and $$D=128$$ measures 42.4
 $$D=128$$ is free if you are already paying for $$D=96$$, and **asking for fewer than
 64 disparities saves nothing at all** — it buys the same block and discards part of
 it. $$D=64$$ is therefore the only sensible setting below the cliff, and it is where
-the matcher runs: 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget, and it
-is the only configuration that does. On a vehicle the board will get hot and slow itself down,
+the matcher runs. 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget. No
+other configuration does. On a vehicle the board will get hot and slow itself down,
 which reduces that margin. When it does, the pipeline drops to 15 Hz instead of failing.
 
-That step has a consequence outside the timing table. The live pipeline had its
-minimum range set to 0.4 m, which is $$D=53$$ — inside the same block as 64, so the
-missing eleven disparities were already bought and thrown away, and everything nearer
-than 0.4 m came back as a confident wrong answer rather than as a gap. Fixing it cost
-nothing measurable: 32.0 ms at $$D=53$$ against 31.7 at $$D=64$$.
+That step has a consequence outside the timing table. The live pipeline had its minimum range set to 0.4 m, which is $$D=53$$. That sits
+inside the same block of 64, so the missing eleven disparities were already bought
+and thrown away. Everything nearer than 0.4 m came back as a confident wrong answer
+rather than as a gap.
+
+Fixing it cost nothing measurable: 32.0 ms at $$D=53$$ against 31.7 at $$D=64$$.
 
 The 848×480 rows are measured on a recorded IR pair from the camera. The smaller
 resolutions are Middlebury scenes at their native sizes.
@@ -331,18 +335,19 @@ a lane per *disparity* rather than per *position* means every lane runs its own
 recurrence.
 
 **An ordered tie-break in the top-2 reduction: ten wrong pixels in 407,040.** The
-mechanism and the fix are in [how the top-2 comes out of the warp](#42-how-the-top-2-comes-out-of-the-warp);
-the part that belongs here is that assuming an order across a shuffle tree is a
-mistake worth naming. Every one
-of the ten differing pixels was an exact score tie. A five-million-run host simulation
-of the precise shuffle tree reproduced it; the fix packs (value, $$k$$) into a single
-integer whose plain comparison is (value descending, $$k$$ ascending), which is
-order-independent. The simulation now runs in `make test`.
+mechanism and the fix are in
+[how the top-2 comes out of the warp](#42-how-the-top-2-comes-out-of-the-warp). The
+part that belongs here is that assuming an order across a shuffle tree is a mistake
+worth naming.
 
-**A compile-time run length: six of eight scenes silently wrong.** The $$k$$-runs were
-padded to a hard-coded 64, and six of the eight ground-truth scenes need $$D=80$$: their
-upper disparities were never scored, and the top-2 read into the *neighbouring pixel's*
-run. The two scenes that passed — Teddy and Cones — are exactly the two everything gets
+Every one of the ten differing pixels was an exact score tie. A five-million-run host
+simulation of the precise shuffle tree reproduced it. The fix packs (value, $$k$$)
+into a single integer whose plain comparison is (value descending, $$k$$ ascending),
+and is therefore order-independent. That simulation now runs in `make test`.
+
+**A compile-time run length: six of eight scenes silently wrong.** The $$k$$-runs were padded to a hard-coded 64, and six of the eight ground-truth
+scenes need $$D=80$$. Their upper disparities were never scored, and the top-2 read
+into the *neighbouring pixel's* run. The two scenes that passed — Teddy and Cones — are exactly the two everything gets
 tuned on, at $$D=60$$.
 
 **Mapping the GPU's wins back to the CPU: mostly no.** Fusing the top-2 insert into the
@@ -360,15 +365,15 @@ int32-carry/int16-store pattern, the ascending-$$k$$ strictly-greater top-2 — 
 replicated.
 
 This costs something. The Nehab-style filter was off the table, and so is any
-reassociation. It has paid for itself three times: the tie bug and the padding bug are
+reassociation. It has paid for itself three times. The tie bug and the padding bug are both
 *invisible* to an accuracy benchmark at the scale they occur, and a race in the
-pipelined mode would be too. The pipelined path writes the **last** frame's output, so
+pipelined mode would be invisible too. The pipelined path writes the **last** frame's output, so
 a broken overlap breaks the identity check instead of passing quietly.
 
-It also means the accuracy story needs no new evidence. The GPU produces the same
-bytes, so Part 2's measurements are the GPU's measurements — including the ones that
-went against expectation, like the [sub-pixel fit][gl-subpix] being worth fifteen points
-and the message passing not paying for itself in the dense path.
+It also means the accuracy story needs no new evidence. The GPU produces the same bytes, so Part 2's measurements are the GPU's
+measurements. That includes the ones that went against expectation: the
+[sub-pixel fit][gl-subpix] being worth fifteen points, and the message passing not
+paying for itself in the dense path.
 
 ## 8. Where this leaves the project
 
