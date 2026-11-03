@@ -212,7 +212,16 @@ population, 31.8% against 89.6% for everything else. Both variants reach the sam
 benchmark score, 0.0288. Only one of them refuses to extrapolate where it has no
 evidence.
 
-The whole model is then two lines:
+The whole model is four lines of C++, and it reads four quantities:
+
+- `s1` and `s2` — the winning score and the runner-up, the two numbers from the table
+  in section 1. Both are similarities: 1 is a perfect match.
+- `lambda` — the cost of leaving a pixel unmatched, −0.1 in this matcher. It stands in
+  for the runner-up where a pixel has only one candidate.
+- `lrc` — how far this pixel's own answer sits from the disparity the right pixel it
+  claimed would have chosen, in disparities. It is not-a-number where that right pixel
+  had no claimant, and a comparison against not-a-number is false, so the cap does not
+  fire there.
 
 ```cpp
 const float alt = (s2 > -1e29f) ? std::max(s2, lambda) : lambda;
@@ -221,9 +230,19 @@ const float p   = 1.f / (1.f + std::exp(-(0.692684f + 7.936751f * x)));
 return (lrc > 1.f) ? std::min(p, 0.35f) : p;
 ```
 
-Evaluated at the eight-scene mean, $$s_1 = 0.682$$ and $$\mathrm{alt} = 0.537$$:
-$$1 - s_1 = 0.318$$, $$x = \log(0.463/0.318) = 0.3757$$, so the logit is
-$$0.692684 + 7.936751 \times 0.3757 = 3.674$$ and $$P = 0.975$$.
+Worked at the mean of the eight scenes, where the winning score is 0.682 and the
+runner-up is 0.537:
+
+| quantity | how | value |
+|---|---|---|
+| `alt` | the runner-up, which is above −0.1, so itself | 0.537 |
+| $$1 - s_1$$ | the winner's cost | 0.318 |
+| $$1 - \mathrm{alt}$$ | the runner-up's cost | 0.463 |
+| $$x$$ | $$\log(0.463 / 0.318)$$ | 0.3757 |
+| logit | $$0.692684 + 7.936751 \times 0.3757$$ | 3.674 |
+| $$P$$ | $$1 / (1 + e^{-3.674})$$ | **0.975** |
+
+The reverse match agrees at this pixel, so the last line leaves the value alone.
 
 ### A single feature, on purpose
 
