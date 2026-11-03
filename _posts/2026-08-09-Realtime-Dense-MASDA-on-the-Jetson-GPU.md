@@ -15,9 +15,17 @@ This is the real-time implementation: [dense MASDA][p2] running on a
 [Jetson TX2][gl-tx2] at **31.7 ms per frame at 848×480**. That is the camera's full resolution, and faster than it delivers frames. The disparity map is
 [bit-identical][gl-bitid] to the CPU matcher on all eight ground-truth scenes.
 
-The design question is not "which parts go on the GPU". It is that the matcher has two
-halves with opposite computational shapes, and the TX2 has two processors with
-opposite strengths. Getting that mapping right is most of the work; the rest is memory layout. That is where the surprise is.
+The design question is not which parts go on the GPU. The matcher has two halves that
+suit different processors, and the TX2 has both.
+
+One half is regular. Census, the cost, the filter and the top-2 selection touch every
+pixel at every disparity, in a pattern fixed at compile time. The other half is
+irregular: the solver walks a different candidate list for each pixel, and it is small
+enough that four ARM cores finish a frame in 11 ms.
+
+Matching the two halves to the two processors is most of the design. What remains is
+memory layout, and that is where the surprise sits: the two machines want opposite
+layouts.
 
 *Every term is defined in the [series glossary][gl-appendix]. [Part 1][p1] derives the
 message equations; [Part 2][p2] is the matcher this post makes real-time.*
