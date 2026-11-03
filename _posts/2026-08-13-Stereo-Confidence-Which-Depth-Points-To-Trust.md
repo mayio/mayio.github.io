@@ -12,10 +12,12 @@ tags: [stereo-matching, computer-vision, confidence, calibration, embedded]
 ---
 
 A stereo matcher produces a depth for almost every pixel. Roughly one in ten of them
-is wrong, and the matcher does not say which. Everything downstream then has to treat
-a measurement it can rely on and one it invented as the same kind of thing: a temporal
-filter votes on them equally, an occupancy grid carves free space out of both, and a
-planner steers around a surface that is not there.
+is wrong, and the matcher does not say which. Everything downstream then has to treat a measurement it can rely on and one it
+invented as the same kind of thing:
+
+- a temporal filter votes on them equally;
+- an occupancy grid carves free space out of both;
+- a planner steers around a surface that is not there.
 
 This post is about giving each point a number that says how much it is worth, using
 only what the matcher already computed. No network, no second pass over the image, and
@@ -80,10 +82,10 @@ make it readable:
 
 On eight Middlebury scenes — 1,077,892 points with ground truth, matched with the gate
 switched off so nothing is scored on a population it has already filtered — the
-population is 10.4% wrong. The measure below closes about three quarters of the
-distance between chance and the oracle, and the practical reading is the curve itself:
-**keep the best 60% of points and three quarters of the errors are gone; keep the
-best 40% and it is nine in ten.**
+population is 10.4% wrong. The measure below closes about three quarters of the distance between chance and
+the oracle. The practical reading is the curve itself. **Keep the best 60% of points
+and three quarters of the errors are gone. Keep the best 40% and it is nine in
+ten.**
 
 | measure | AUC | error at 60% kept |
 |---|---|---|
@@ -97,9 +99,10 @@ subtract.
 
 ## 3. The textbook trick that bought nothing, and why
 
-The most useful single finding in the modern literature on this is Poggi, Tosi and
-Mattoccia's [re-evaluation of 52 confidence measures][poggi], and it is unambiguous:
-**local aggregation is what separates a good hand-crafted measure from a poor one.**
+The most useful single finding in the modern literature on this comes from Poggi,
+Tosi and Mattoccia's [re-evaluation of 52 confidence measures][poggi]. It is
+unambiguous: **local aggregation is what separates a good hand-crafted measure from
+a poor one.**
 The peak ratio pooled over a small window — *APKR* — ranks in the top handful of
 hand-crafted measures, while the per-pixel version does not.
 
@@ -166,9 +169,9 @@ the few per cent that happened to survive — silently, and it still looks like 
 Partly, and the overlap is worth being precise about, because it is easy to assume the
 work is redundant.
 
-A matcher that enforces uniqueness — at most one left pixel per right pixel — resolves
-*collisions between winners*: two left pixels claim the same right pixel, the stronger
-claim takes it, the loser gets no answer. The reverse match asks a wider question, of
+Uniqueness means at most one left pixel per right pixel. A matcher that enforces it
+resolves *collisions between winners*: two left pixels claim the same right pixel,
+the stronger claim takes it, and the loser gets no answer. The reverse match asks a wider question, of
 every candidate rather than only the winners:
 
 > Left 10's best is right 9, at 0.82. Nothing else is close, so it looks confident.
@@ -252,9 +255,9 @@ model cannot say what needs saying.
 A region with no texture has a constant descriptor, so **every** disparity matches it
 perfectly. Then $$s_1 = s_2$$: the margin is zero, the ratio is one, and both cues
 correctly report no information. But a model that also reads the *winning score* sees a
-perfect score and returns 0.94. It cannot express "a high score only counts when the
-margin is not zero", because that is a product and it is a sum — and it was never shown
-such a pixel, because Middlebury is textured almost everywhere.
+perfect score and returns 0.94. It cannot express "a high score only counts when the margin is not zero", because
+that is a product and the model is a sum. And it was never shown such a pixel, because
+Middlebury is textured almost everywhere.
 
 I found this by padding a test frame with black. The padding scored **higher** than the
 real image beside it. The single-feature model returns 0.667 there, below anything a
@@ -309,9 +312,9 @@ frame and knows almost nothing about how good the frame is.**
 That has a direct practical consequence, and it is the one I would most like a reader
 to take away. A fixed threshold — "keep everything above 0.85" — keeps 6% of points in
 one condition and 18% in another. It throws away most of a good cloud and retains a
-sixth of a hopeless one. **Threshold on the fraction instead:** "keep the best 40% of
-this frame" behaves identically at midnight and at noon, because it is a quantile of a
-distribution rather than a point on an uncalibrated scale.
+sixth of a hopeless one. **Threshold on the fraction instead.** "Keep the best 40% of this frame" behaves
+identically at midnight and at noon. It is a quantile of a distribution, rather than
+a point on an uncalibrated scale.
 
 The exception is the first pair of bars: in a dark room with the projector off, the
 frame carries 0.12 DN of local contrast and 38.6% of pixels get any answer at all. No
@@ -328,11 +331,12 @@ loops over scratch memory that was already dead. The model is a logarithm, a div
 an exponential. Per point, the live pipeline sends one extra byte.
 
 The exact reverse match, over all 64 disparities rather than the two candidates that
-survived, would be worth roughly twice as much again. It is the one piece here that is
-genuinely expensive: on a k-minor cost volume the reverse reduction runs along a
-diagonal, which is uncoalesced by construction, and doing it on the GPU means about 26
-million atomic maximums per frame on a device already at 26 ms of kernels in a 28.9 ms
-budget. That is a trade to make on evidence, not on principle.
+survived, would be worth roughly twice as much again. It is also the one piece here that is genuinely expensive. On a k-minor cost volume
+the reverse reduction runs along a diagonal, which is uncoalesced by construction.
+Doing it on the GPU means about 26 million atomic maximums per frame, on a device
+already spending 26 ms of its 28.9 ms budget on kernels.
+
+That is a trade to make on evidence, not on principle.
 
 ## 9. What I would tell someone starting this
 
