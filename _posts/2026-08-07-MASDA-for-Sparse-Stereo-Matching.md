@@ -20,13 +20,14 @@ problem, a [disparity](/masda-glossary/#disparity) for every pixel — and measu
 
 The formulation runs on **sparse matrices**. Each pixel offers only its two best
 disparity candidates out of the aggregated [cost volume](/masda-glossary/#cost-volume), so the
-association graph carries two edges per pixel instead of a $$W \times W$$ matrix
-per row, and every
-result below depends on that representation twice over: it is what makes the exact
-comparison feasible, and it is what makes the solver fast.
+association graph carries two edges per pixel, instead of a $$W \times W$$ matrix
+per row.
+
+Every result below depends on that representation twice over. It is what makes the
+exact comparison feasible, and it is what makes the solver fast.
 
 *[Part 2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/)
-takes this formulation into C++ on a Jetson TX2 and measures it against SGM;
+takes this formulation into C++ on a Jetson TX2 and measures it against SGM.
 [Part 3](https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/)
 makes it real-time on the TX2's GPU, bit-identically.*
 
@@ -50,9 +51,9 @@ scenes with [structured-light ground truth](/masda-glossary/#structured-light-gr
   on a harder benchmark.
 - **Loopy [max-sum](/masda-glossary/#max-sum-max-product-and-sum-product) matches the exact
   [assignment](/masda-glossary/#linear-assignment-problem) optimum on precision** where the
-  exact optimum is computable: per-row
-  [Jonker-Volgenant](/masda-glossary/#jonker-volgenant-and-the-hungarian-method) reaches 0.914 and
-  0.941 on Teddy and Cones; MASDA reaches 0.915 and 0.942.
+  exact optimum is computable. Per-row
+  [Jonker-Volgenant](/masda-glossary/#jonker-volgenant-and-the-hungarian-method) reaches
+  0.914 on Teddy and 0.941 on Cones. MASDA reaches 0.915 and 0.942.
 - It does that from **two message-passing iterations**, sitting 0.8% short of the
   optimal [objective](/masda-glossary/#objective-ratio) with **1.6% of rows exactly optimal**.
   Thirty iterations close the objective gap to 0.08% and make 47–69% of rows
@@ -84,10 +85,9 @@ association each way, because one surface point produces one projection per
 image. A left pixel whose surface is occluded in the right view has no partner
 at all, which is clutter ($$\lambda$$). A right pixel whose surface is hidden
 from the left camera is a misdetection ($$\gamma$$). [Occlusion](/masda-glossary/#occlusion) is not
-a small
-correction: on these scenes it affects 10–20% of pixels, and a formulation that
-assumes every pixel is matchable is wrong exactly at the depth discontinuities
-where stereo is hardest.
+a small correction. On these scenes it affects 10–20% of pixels. A formulation that
+assumes every pixel is matchable is therefore wrong exactly at the depth
+discontinuities where stereo is hardest.
 
 What stereo adds is geometry. The pair is rectified, so correspondences lie on
 the same image row and disparity $$d = x_L - x_R$$ is positive and bounded. Each
@@ -96,11 +96,18 @@ parallel, and later, a GPU workload.
 
 ### 1.1 Factor graph
 
-Same as the tracking case, on the same [factor graph](/masda-glossary/#factor-graph): binary
-association variables $$c_{ij}$$, clutter
-indicators $$e_i$$, misdetection indicators $$\delta_j$$, similarity factors $$S_{ij}$$,
-clutter factors $$\Lambda_i$$, misdetection factors $$\Gamma_j$$, and the exclusivity
-constraints $$I_i$$ and $$E_j$$.
+Same as the tracking case, on the same
+[factor graph](/masda-glossary/#factor-graph):
+
+| symbol | what it is |
+|---|---|
+| $$c_{ij}$$ | association variable, 1 if left pixel $$i$$ matches right pixel $$j$$ |
+| $$e_i$$ | clutter indicator, 1 if left pixel $$i$$ matches nothing |
+| $$\delta_j$$ | misdetection indicator, 1 if right pixel $$j$$ is matched by nothing |
+| $$S_{ij}$$ | similarity factor, the score of the pair |
+| $$\Lambda_i$$ | clutter factor, the price of leaving $$i$$ unmatched |
+| $$\Gamma_j$$ | misdetection factor, the price of leaving $$j$$ unclaimed |
+| $$I_i$$, $$E_j$$ | exclusivity constraints, at most one match each way |
 
 The graph is loopy. Every $$c_{ij}$$ sits in both an $$I_i$$ and an $$E_j$$ constraint, so
 there are four-cycles everywhere. Hence [loopy belief
@@ -161,19 +168,20 @@ $$
 
 In the dense formulation, $$E = 2$$ per pixel — the two best candidates out of the
 aggregated volume — so a 450-pixel row carries ~900 edges instead of the ~200,000
-cells of its full matrix. Why two is the right number is measured in Part 2: keeping
-eight candidates per pixel is measurably *worse* than keeping two, because the extra
-candidates are noise, and the solver has to weigh them against the real ones.
+cells of its full matrix. Why two is the right number is measured in Part 2. Keeping eight candidates per
+pixel is measurably *worse* than keeping two: the extra six are noise, and the
+solver has to weigh them against the real ones.
 
 ### 1.3 The score
 
 Descriptors are the [Census transform](/masda-glossary/#census-transform) over a
-$$7 \times 7$$ window: one bit per
-neighbour, set when the neighbour is darker than the centre. 48 bits fit a
-`uint64`, so the distance is a single
-[`popcount`](/masda-glossary/#hamming-distance-and-popcount), and Census is invariant to
-monotonic intensity mappings, which absorbs gain and offset differences between
-two real sensors.
+$$7 \times 7$$ window. Each of the 48 neighbours contributes one bit, set when that
+neighbour is darker than the centre. All 48 fit a `uint64`, so the distance between
+two descriptors is a single
+[`popcount`](/masda-glossary/#hamming-distance-and-popcount).
+
+Census is invariant to monotonic intensity mappings. That absorbs the gain and
+offset differences between two real sensors.
 
 Two unrelated Census descriptors agree on half their bits by chance, so scaling
 the [Hamming distance](/masda-glossary/#hamming-distance-and-popcount) $$h$$ around that point
@@ -188,10 +196,10 @@ signal per pixel. The score MASDA actually consumes is
 edge-aware support region — an [O(N) recursive
 filter](/masda-glossary/#edge-aware-recursive-filter) that stops at intensity
 edges — so each candidate's score summarises a neighbourhood while respecting
-depth boundaries. The aggregation machinery, and the measurements behind each of
-its choices, are Part 2's subject; here it is the given: the sparse candidate
-matrix is built from the aggregated volume of the shipping implementation, so
-this study and the production pipeline score identical evidence.
+depth boundaries. The aggregation machinery, and the measurements behind each of its choices, are
+Part 2's subject. Here it is simply given. The sparse candidate matrix is built
+from the aggregated volume of the shipping implementation, so this study and the
+production pipeline score identical evidence.
 
 ---
 
@@ -216,8 +224,9 @@ this website."
 > [doi:10.1109/CVPR.2007.383191](https://doi.org/10.1109/CVPR.2007.383191)
 
 The 2005 two-view archives ship no documented disparity scale, so the factor of 3
-is established rather than assumed: for a pixel at $$x$$ in the left view with true
-disparity $$t$$, the right view's disparity map at $$x - t$$ must also read $$t$$.
+is established rather than assumed. Take a pixel at $$x$$ in the left view whose
+true disparity is $$t$$. The right view's disparity map at $$x - t$$ must then read
+$$t$$ as well.
 That identity holds to a median of 0.000 px at a scale of 3 and fails at every
 other integer, and it involves no matcher, so it cannot flatter the results.
 
@@ -254,9 +263,9 @@ def top2_excluding(A, axis):
     return out
 ```
 
-Ties and dead entries are the cases to get right, and this form handles both: the
-substitution is by *index*, so two equal maxima do not both get demoted, and a line
-of `-inf` returns `-inf`. Checked against a brute-force scan over 6000 random
+Ties and dead entries are the cases to get right, and this form handles both. The
+substitution is by *index*, so two equal maxima do not both get demoted. A line of
+`-inf` returns `-inf`. Checked against a brute-force scan over 6000 random
 matrices with a deliberately small value range, no disagreements.
 
 The solver, in the notation above — the dense-matrix reference version:
@@ -319,10 +328,10 @@ Two questions were tangled together:
 
 So: [order by belief, decide by $$\lambda$$](/masda-glossary/#greedy-decode), require row and column
 to agree, then fill
-in greedily by belief over what is left. The greedy fill is not cosmetic: under
-near-ties every row's best belief points at the same column, so requiring mutual
-agreement commits exactly one pair, and every greedily accepted edge has
-$$s > \lambda$$ and two free endpoints, so it raises the objective.
+in greedily by belief over what is left. The greedy fill is not cosmetic. Under near-ties every row's best belief points at
+the same column, so requiring mutual agreement commits exactly one pair and leaves
+the rest of the row empty. Every edge the fill then accepts has $$s > \lambda$$ and
+two free endpoints, so each one raises the objective.
 
 ### 3.2 The sparse-matrix form — this is the design, not an optimisation
 
@@ -347,9 +356,16 @@ def _seg_max_excluding(vals, idx, n):
     return np.where(at_max, second[idx], m1[idx])
 ```
 
-Three cases: an element below the max sees the max; an element at the max also sees
-the max, provided something else attains it; otherwise it sees the runner-up. Ties
-need handling rather than ignoring, since near-ties are the case of interest.
+Each element is compared against one of two values, and which one depends on three
+cases:
+
+| the element | what it is compared against |
+|---|---|
+| below the maximum | the maximum |
+| at the maximum, and something else also attains it | the maximum |
+| at the maximum, and nothing else attains it | the runner-up |
+
+Ties need handling rather than ignoring, since near-ties are the case of interest.
 
 The solver is then five lines per iteration:
 
@@ -370,9 +386,8 @@ Same messages, same damping, same belief, same decision rule as the dense-matrix
 version. Only the representation differs — and [section 5](#5-speed-the-representation-decides-it)
 shows that difference is a factor of 62 on this problem, before any compiled code.
 
-A note on [damping](/masda-glossary/#damping): undamped max-sum on heavily tied problems does not
-settle; the
-largest message change plateaus instead of decaying. Damping of 0.3–0.5 stabilises
+A note on [damping](/masda-glossary/#damping). Undamped max-sum does not settle on
+heavily tied problems: the largest message change plateaus instead of decaying. Damping of 0.3–0.5 stabilises
 it, and solution quality is flat across that range. [Message convergence is not the
 property you need](/masda-glossary/#convergence-and-the-anytime-property) anyway — the *decision*
 stabilises long before the messages do,
@@ -383,16 +398,29 @@ fifteen times sooner, on these scenes.
 
 ## 4. Results against ground truth
 
-$$\lambda = \gamma = -0.1$$, **two iterations** — the shipping configuration —
-damping 0.4, candidates = top-2 per pixel from the aggregated volume, tolerance
-1 px, unknown ground truth excluded. ([Section 4.3](#43-two-iterations-against-thirty)
-measures what the other 28 iterations would buy, which is nothing.)
-Three solvers on **identical scores**: [winner-take-all](/masda-glossary/#winner-take-all) (argmax
-over the full volume — no uniqueness), MASDA on the sparse candidate matrix, and
-per-row exact
-assignment ([Jonker-Volgenant](/masda-glossary/#jonker-volgenant-and-the-hungarian-method) with
-explicit $$\lambda$$/$$\gamma$$ slots, so
-non-association is a real option for it too).
+The shipping configuration, used for every number in this section:
+
+| setting | value |
+|---|---|
+| clutter and misdetection | $$\lambda = \gamma = -0.1$$ |
+| iterations | 2 |
+| damping | 0.4 |
+| candidates per pixel | top 2, from the aggregated volume |
+| tolerance | 1 px |
+| ground truth | unknown pixels excluded |
+
+[Section 4.3](#43-two-iterations-against-thirty) measures what the other 28
+iterations would buy. The answer is nothing.
+
+Three solvers run on **identical scores**:
+
+- [winner-take-all](/masda-glossary/#winner-take-all) — argmax over the full volume,
+  with no uniqueness constraint at all.
+- MASDA, on the sparse candidate matrix.
+- per-row exact
+  assignment ([Jonker-Volgenant](/masda-glossary/#jonker-volgenant-and-the-hungarian-method)),
+  given explicit $$\lambda$$ and $$\gamma$$ slots so that leaving a pixel unmatched
+  is a real option for it too.
 
 ### 4.1 What uniqueness is worth
 
@@ -414,11 +442,11 @@ score*, with no message passing at all. **The constraint delivers the entire gai
 The message passing costs 0.8 points of precision and returns 6,333 more correct
 answers**, which is the same trade the margin gate offers for free.
 
-That is not the reading I expected when I built this, and it is reproduced
-independently in [Part 2][p2] by the engineered C++ matcher, in a different
-codebase, on a different benchmark, at a different tolerance: disabling the message
-passing there measures *better* and saves twelve milliseconds of CPU per frame. Two
-measurements that share no code agree on the shape.
+That is not the reading I expected when I built this. [Part 2][p2] reproduces it
+independently, with the engineered C++ matcher — a different codebase, a different
+benchmark, a different tolerance. Disabling the message passing there measures
+*better*, and saves twelve milliseconds of CPU per frame. Two measurements that
+share no code agree on the shape.
 
 What the messages do earn is visible in the next two sections: they get closer to
 the exact assignment objective, and they do it while remaining an approximation.
@@ -444,15 +472,16 @@ most to contribute. The constraint pays in proportion to the
 [ambiguity](/masda-glossary/#repetitive-texture-and-ambiguity), and here that is
 measured over 1.3 million answers.
 
-For the full engineered pipeline (the C++ implementation with its
-[margin gate](/masda-glossary/#margin-and-the-margin-gate),
-which trades a little coverage for precision), [Part 2][p2] measures **24.5%
-[bad-1.0](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate) at 79.6%
-[coverage](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate)** on the fifteen
-Middlebury v3 training scenes, against the benchmark's own
-[SGM](/masda-glossary/#semi-global-matching) reference at 29.1% and 90.2% — a lower
-error rate over the pixels it answers, ten points fewer of them, and a curve that
-runs below SGM's where the two overlap. On these eight 2003/2005 scenes at native
+The full engineered pipeline adds a [margin gate](/masda-glossary/#margin-and-the-margin-gate),
+which trades a little coverage for precision. On the fifteen Middlebury v3 training
+scenes, [Part 2][p2] measures it at **24.5%
+[bad-1.0](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate) and 79.6%
+[coverage](/masda-glossary/#coverage-precision-and-the-bad-pixel-rate)**. The
+benchmark's own [SGM](/masda-glossary/#semi-global-matching) reference reads 29.1%
+and 90.2% on the same scenes.
+
+Read that as three statements: a lower error rate over the pixels it answers, ten
+points fewer of them, and a curve that runs below SGM's where the two overlap. On these eight 2003/2005 scenes at native
 resolution it measures 9.8% against OpenCV SGM's 10.9%. Both are real; the harder
 benchmark and the looser one disagree about the ordering, and Part 2 shows why.
 
@@ -481,9 +510,9 @@ Whatever approximation error loopy max-sum commits here, it is not made of wrong
 disparities.
 
 **It is genuinely an approximation.** The
-[objective ratio](/masda-glossary/#objective-ratio) against JV never reaches 1:
-0.9918 at the shipping setting, and even
-at thirty iterations MASDA reaches the exact optimum on only 47% and 69% of rows. The
+[objective ratio](/masda-glossary/#objective-ratio) against JV never reaches 1, and
+reads 0.9918 at the shipping setting. Even at thirty iterations MASDA reaches the
+exact optimum on only 47% and 69% of rows. The
 difference is ties. An aggregated Census volume quantises to few enough levels
 that exactly tied candidates are everywhere, so the
 [LP-uniqueness condition](/masda-glossary/#lp-relaxation-and-the-uniqueness-condition) of the
@@ -491,10 +520,9 @@ Bayati-Shah-Sharma guarantee fails routinely.
 
 **And the gap costs nothing.** Two iterations sit 0.8% short of the optimal
 objective with 1.6% of rows optimal; thirty iterations close that to 0.08% and 47%
-— and return no extra precision whatsoever. The objective is a proxy, and this is
-the cleanest evidence I have that it is a loose one: an 0.8% objective deficit and
-a 30× shortfall in exactly-solved rows are invisible in the only quantity a
-consumer experiences.
+— and return no extra precision whatsoever. The objective is a proxy, and this is the cleanest evidence I have that it is a
+loose one. An 0.8% objective deficit and a 30× shortfall in exactly-solved rows are
+both invisible in the only quantity a consumer experiences.
 
 ### 4.3 Two iterations against thirty
 
@@ -512,14 +540,16 @@ marginal candidates from "not answered" to "answered", and those marginal
 candidates are wrong slightly more often than the population average — so the
 objective improves while precision does not.
 
-This is the quantitative form of a claim [section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation)
-makes qualitatively: **[message convergence is not the property you
-need](/masda-glossary/#convergence-and-the-anytime-property).** The
-messages are still moving at iteration thirty; the decision stopped moving around
-iteration two. Every number elsewhere in this article is therefore reported at the
-shipping setting, and I would treat any belief-propagation matcher quoting an
-iteration count without this comparison with suspicion — including my own earlier
-version of this page.
+[Section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation)
+makes this claim qualitatively. Here it is in numbers:
+**[message convergence is not the property you
+need](/masda-glossary/#convergence-and-the-anytime-property).** The messages are
+still moving at iteration thirty. The decision stopped moving around iteration two.
+
+Every number elsewhere in this article is therefore reported at the shipping
+setting. I would treat any belief-propagation matcher that quotes an iteration count
+without this comparison with suspicion, including my own earlier version of this
+page.
 
 ---
 
@@ -527,9 +557,9 @@ version of this page.
 
 The complexity argument is $$O(T \cdot E)$$ against
 [Jonker-Volgenant's](/masda-glossary/#jonker-volgenant-and-the-hungarian-method)
-$$O(N^3)$$. Written the obvious way — messages in a per-row $$W \times W$$ matrix
-padded with $$-\infty$$ — the argument buys nothing: with two real candidates per
-pixel, more than 99% of the arithmetic lands on $$-\infty$$ cells.
+$$O(N^3)$$. Written the obvious way, the argument buys nothing. Keep the messages in a per-row
+$$W \times W$$ matrix padded with $$-\infty$$, and with two real candidates per
+pixel more than 99% of the arithmetic lands on the $$-\infty$$ cells.
 
 One frame of Teddy (369 rows, 326,565 edges), same solvers, same answers:
 
@@ -540,25 +570,27 @@ One frame of Teddy (369 rows, 326,565 edges), same solvers, same answers:
 | per-row JV (scipy, compiled) | 7.6 s | 10.0 s |
 
 At the shipping setting the sparse-matrix solver is **19× faster than the same
-mathematics on dense matrices and 20× faster than compiled exact assignment** —
-from interpreted NumPy. (Jonker-Volgenant does not depend on the iteration count
-at all; its two entries differ only by measurement noise on a shared desktop,
-which is a useful reminder of how much precision to read into any single row of
-this table.) These are study numbers, not production numbers: the identical algorithm
-in C++ (Part 2) solves a frame in ~11 ms on a desktop and ~23 ms on the Jetson
-TX2's ARM cores, and the full GPU pipeline (Part 3) — cost volume, aggregation
-and solve together — runs at 28.9 ms per frame at 848×480, bit-identical to the
-C++ output. Five orders of magnitude between the first table's first row and the
+mathematics on dense matrices, and 20× faster than compiled exact assignment** —
+from interpreted NumPy.
+
+Jonker-Volgenant does not depend on the iteration count at all. Its two entries
+differ only by measurement noise on a shared desktop, which is a useful reminder of
+how much precision to read into any single row of this table.
+
+These are study numbers, not production numbers. The identical algorithm in C++
+(Part 2) solves a frame in ~11 ms on a desktop and ~23 ms on the Jetson TX2's ARM
+cores. The full GPU pipeline (Part 3) runs cost volume, aggregation and solve
+together at 28.9 ms per frame at 848×480, bit-identical to the C++ output. Five orders of magnitude between the first table's first row and the
 shipping pipeline, and not one change to the messages: representation,
 then engineering.
 
 The actual claim, then: MASDA's cost is linear in the number of *plausible*
 associations, and the aggregated volume plus geometry cuts a $$W \times W$$ row
 problem to two candidates per pixel. Only a representation that exploits that
-sees any benefit. This also reframes the comparison with an exact solver: it is
-not about accuracy — [section 4.2](#42-against-the-exact-optimum) shows JV is exactly
-as good — it is that MASDA
-is [anytime](/masda-glossary/#convergence-and-the-anytime-property), incremental, and accepts
+sees any benefit. This also reframes the comparison with an exact solver. It is not about accuracy:
+[section 4.2](#42-against-the-exact-optimum) shows JV is exactly as good. It is that
+MASDA is [anytime](/masda-glossary/#convergence-and-the-anytime-property),
+incremental, and accepts
 factors that destroy the assignment
 structure, where a [LAP solver](/masda-glossary/#linear-assignment-problem) cannot follow.
 
@@ -592,11 +624,16 @@ The ordering message is the conflicting edge's own preference, clamped and
 negated. One scalar, constant time. I checked it against brute-force max-sum over
 20000 random cases; agreement is 4×10⁻¹⁶.
 
-**It composes with the sparse-matrix form without touching it.** Because these
-messages are additive on the edge they fold into the score: writing
-$$o_e = -\sum_{f \in X(e)} \operatorname{clamp}(b_f, 0, \kappa)$$ for the summed
-ordering pressure, the updates are the same two segment reductions of
-[section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation)
+**It composes with the sparse-matrix form without touching it.** These messages are
+additive on the edge, so they fold into the score. Write $$o_e$$ for the ordering
+pressure on edge $$e$$, summed over the edges that conflict with it:
+
+$$o_e \;=\; -\sum_{f \in X(e)} \operatorname{clamp}\!\left(b_f,\, 0,\, \kappa\right)$$
+
+Here $$X(e)$$ is the set of edges that cross $$e$$, $$b_f$$ is edge $$f$$'s belief,
+and $$\kappa$$ caps how hard a single conflict can push. The updates are then the
+same two segment reductions of
+[section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation),
 with $$s + o$$ substituted for $$s$$. No new message type, no change to the
 solver's structure. This is the property that makes MASDA worth preferring over
 an exact assignment solver, which cannot follow here at all.
@@ -609,8 +646,8 @@ sparse — is therefore untouched, and what the factor contributes is a per-edge
 penalty folded into the score. The matrix keeps its shape; the numbers in it change.
 
 The guess is right for a different algorithm. Scanline dynamic programming commits
-matches left to right, so once $$(i,j)$$ is fixed every crossing candidate for every
-later pixel is gone and the remaining search really does shrink — that is what
+matches left to right. Once $$(i,j)$$ is fixed, every crossing candidate for every
+later pixel is gone, and the remaining search really does shrink. That is what
 "ordering is free in DP" means. MASDA commits nothing until the decode and settles
 the whole row jointly, so it has to *represent* the constraint rather than *exploit*
 it. Representing it costs about 2400 crossing pairs against 885 edges on a dense row,
@@ -639,21 +676,23 @@ the bipartite convergence result does not cover:
 | Cones | 0.941 | 0.943 | +0.2 | 0.59× |
 | Teddy | 0.912 | 0.915 | +0.3 | 0.47× |
 
-**The factor does exactly what the derivation says: it removes about half the
-crossings (0.54× on average, never worse than 0.67×) and improves precision on
-all eight scenes** — mean +0.43 points, standard error 0.094, and unanimous,
-which matters more than the $$t$$-statistic on eight scenes. The gain is largest
+**The factor does exactly what the derivation predicts.** It removes about half the
+crossings — 0.54× on average, never worse than 0.67× — and it improves precision on
+all eight scenes. The mean gain is +0.43 points with a standard error of 0.094. It
+is the unanimity that matters here, more than the $$t$$-statistic on eight scenes. The gain is largest
 where the scene is worst (Laundry +0.9 at precision 0.771, Reindeer +0.7), the
 same shape uniqueness itself shows in [section 4.1](#41-what-uniqueness-is-worth).
 
-And it is **not worth switching on**, for a reason that is specific to the dense
+And it is **not worth switching on**, for a reason specific to the dense
 formulation: *the band is the whole row.* Every pixel is a node, so a row carries
-~885 edges and ~2400 crossing pairs — they outnumber edges by nearly 3:1, and the
-$$O(E_r^2)$$ enumeration that is free on a handful of nodes becomes the largest
-item on the board. Enumerating and reducing over
-600,000 of them per scene is 5–7× the entire solve, to buy 0.4 points of
-precision — against a factor of 62 that the sparse-matrix representation buys for
-free, and 40 more correct answers out of 243,000.
+about 885 edges and about 2,400 crossing pairs. The pairs outnumber the edges by
+nearly 3:1, and the $$O(E_r^2)$$ enumeration that is free on a handful of nodes
+becomes the largest item on the board.
+
+Enumerating and reducing over 600,000 pairs per scene costs 5–7× the entire solve,
+and buys 0.4 points of precision. Set that against the factor of 62 the
+sparse-matrix representation buys for free. In absolute terms it is 40 more correct
+answers out of 243,000.
 
 The $$\kappa$$ sweep says the same thing from another direction: 0.1, 0.3 and 0.8
 all land within 0.003 of one another on precision and within 1% on crossings
@@ -661,18 +700,17 @@ retained. The factor saturates immediately — it is not being tuned into
 usefulness, it is doing all it can do and that is a small thing.
 
 So: **ordering is expressible inside the existing closed form, and on the dense
-problem it is a real but poor trade.** The $$O(E_r
-\log E_r)$$ [Fenwick-tree](/masda-glossary/#fenwick-tree) construction is a
-*precondition* here rather than an optimisation, and even at that price the
-0.4-point return does not obviously justify the loops it adds to a graph whose
-convergence is already unguaranteed. Where I would expect it to matter is
+problem it is a real but poor trade.** The $$O(E_r \log E_r)$$
+[Fenwick-tree](/masda-glossary/#fenwick-tree) construction is a *precondition* here
+rather than an optimisation. Even at that price, a 0.4-point return does not
+obviously justify the loops it adds to a graph whose convergence is already
+unguaranteed. Where I would expect it to matter is
 precisely where the geometry stops helping: an uncalibrated pair, or
 two-dimensional temporal association, where nothing constrains ordering for free.
 
-One structural note worth keeping. Crossings correlate strongly with the error
-rate rather than with the geometry — the scenes with the most crossings (Art
-31,116; Laundry 27,126) are the two least precise, and Cones and Books, the most
-precise, have the fewest. Crossings are largely a *symptom* of wrong matches, not
+One structural note worth keeping. Crossings correlate strongly with the error rate rather than with the geometry. The
+two scenes with the most crossings, Art at 31,116 and Laundry at 27,126, are the two
+least precise. Cones and Books are the most precise and have the fewest. Crossings are largely a *symptom* of wrong matches, not
 an independent property, which is why penalising them removes wrong matches and
 why the effect is largest on the scenes that need it most. It also caps the
 upside: you cannot fix an error the constraint cannot see, and a patch of
@@ -718,10 +756,10 @@ along scanline paths and has **no uniqueness constraint at all** — a
 [left-right consistency check](/masda-glossary/#left-right-consistency-check) is added afterwards
 afterwards, which costs a second matcher run.
 MASDA gets mutual exclusivity inside the inference, in one run, plus a per-pixel
-confidence (the [margin](/masda-glossary/#margin-and-the-margin-gate)) as a by-product. Measured head-to-head in Part 2:
-**9.2% bad-1.0 against OpenCV SGM's 10.9%** over these eight scenes at native
-resolution, at 76% against 78% coverage — and behind Middlebury's own SGM reference on
-the harder v3 set, where the two curves cross the other way. The two mechanisms are orthogonal, and the interesting object — a
+confidence (the [margin](/masda-glossary/#margin-and-the-margin-gate)) as a by-product. Part 2 measures the two head-to-head. Over these eight scenes at native resolution
+it reads **9.2% bad-1.0 against OpenCV SGM's 10.9%**, at 76% coverage against 78%.
+On the harder v3 set it sits behind Middlebury's own SGM reference, where the two
+curves cross the other way. The two mechanisms are orthogonal, and the interesting object — a
 factor graph with both uniqueness and path smoothness — does not exist in either
 tool today.
 
@@ -760,9 +798,9 @@ Where MASDA on sparse matrices is the right choice:
   temporal factor keeps a [factor graph](/masda-glossary/#factor-graph) a factor
   graph, whereas it stops being an assignment problem.
   [Section 6](#6-can-masda-express-the-ordering-constraint) is the demonstration
-  *and* the caution: a new pairwise constraint costs one clamped scalar per
-  conflicting edge and folds into the existing reductions — and on the dense
-  problem the crossing-pair enumeration it needs outweighs what it returns.
+  *and* the caution. A new pairwise constraint costs one clamped scalar per
+  conflicting edge, and folds into the existing reductions. On the dense problem,
+  though, the crossing-pair enumeration it needs outweighs what it returns.
 - Clutter and misdetection are first-class rather than post-hoc thresholds, which
   matters when occlusion makes 10–20% of pixels unmatchable.
 
@@ -794,11 +832,12 @@ contains — MASDA equals exact inference — so the shortfall is in the evidenc
 small model trained against ground truth to output a calibrated log-likelihood
 ratio would change these numbers more than any refinement of the message passing.
 
-**A [smoothness factor](/masda-glossary/#smoothness-prior), done properly.** (Ordering is now
-measured rather than open — [section 6](#6-can-masda-express-the-ordering-constraint) —
-and the interesting question it leaves is whether a
-neighbourhood factor pays where ordering did not.) Neighbouring pixels on the same surface
-have similar disparity, and the current factor graph ignores it. The cheap
+**A [smoothness factor](/masda-glossary/#smoothness-prior), done properly.**
+Neighbouring pixels on the same surface have similar disparity, and the current
+factor graph ignores that entirely.
+[Section 6](#6-can-masda-express-the-ordering-constraint) now measures ordering
+rather than leaving it open, and the question it leaves behind is whether a
+neighbourhood factor pays where ordering did not. The cheap
 variants are measured negatives (Part 2's record); the real derivation — path
 aggregation as factors, so uniqueness and smoothness live in one graph — is the
 interesting object this formulation makes possible.
@@ -813,9 +852,12 @@ went unmeasured for so long: the benchmark in use could not resolve it.
 **A calibrated per-point confidence.** The margin orders points by how much they can
 be trusted; it does not say what a given value *means*. Fusing depth over time, or into
 an occupancy grid, needs the second thing — an existence probability, where 0.8 is
-right 80% of the time. That is a different exercise from ranking: it is measuring the
-empirical error rate in each score bin against ground truth and fitting the mapping,
-then checking the fit survives the move from a dataset to this camera. The literature
+right 80% of the time. That is a different exercise from ranking. It is three steps:
+
+1. Bin the scores, and measure the empirical error rate in each bin against ground
+   truth.
+2. Fit the mapping from score to probability.
+3. Check that the fit survives the move from a dataset to this camera. The literature
 on stereo confidence measures ranks them by area under the sparsification curve, which
 answers the ordering question and stops there.
 
@@ -835,9 +877,9 @@ the mathematics — decides whether any of it is usable.
 
 ## Appendix: terms, concepts and sources
 
-Every term this article uses — factor graphs, max-sum messages, Census, cost
-aggregation, SGM, the Jetson's memory system — is defined in the
-[glossary for this series](/masda-glossary/), with links to the original work
-behind each one. Terms link there on first use, in all three parts.
+Every term this article uses is defined in the
+[glossary for this series](/masda-glossary/): factor graphs, max-sum messages,
+Census, cost aggregation, SGM, the Jetson's memory system. Each entry links to the
+original work behind it. Terms link there on first use, in all three parts.
 
 [p2]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
