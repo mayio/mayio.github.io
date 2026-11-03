@@ -38,8 +38,8 @@ A bipartite graph with *variable* nodes and *factor* nodes, where each factor
 connects the variables it scores and the whole graph represents one big function as
 a sum (or product) of local terms. It is the data structure that makes message
 passing possible: an algorithm can be written entirely as "what each node tells its
-neighbours". The canonical reference is Kschischang, Frey and Loeliger; my own
-worked introduction, with code, is the [loopy belief propagation
+neighbours". The canonical reference is Kschischang, Frey and Loeliger. My own worked
+introduction, with code, is the [loopy belief propagation
 post](https://www.mariolueder.com/2022-09-17-Loopy-Belief-Propagation/#factor-graphs).
 
 > F. R. Kschischang, B. J. Frey, H.-A. Loeliger (2001). *Factor graphs and the
@@ -80,14 +80,15 @@ family; see [SPADA](#spada) for the sum-product one.
 
 ### Messages: responsibility and availability
 
-The two message directions. $$\rho_{ij}$$ flows from the measurement side and asks
-"how good is this pair, net of the best thing $$i$$ could do instead"; $$\beta_{ij}$$
-asks the same from the object side. The naming follows affinity propagation, where
-$$\rho$$ is the *responsibility* a point takes for an exemplar and the
-*availability* $$\alpha$$ is what the exemplar offers back — here
-$$\beta_{ij} = s_{ij} + \alpha_{ij}$$, which is why the belief is
-$$\beta + \rho - s$$. Frey and Dueck introduced the pair; Givoni and Frey's binary
-variable model is the derivation the [original MASDA
+The two message directions. $$\rho_{ij}$$ flows from the measurement side. It scores
+the pair net of the best thing $$i$$ could do instead. $$\beta_{ij}$$ is the same
+quantity from the object side.
+
+The naming follows affinity propagation. There $$\rho$$ is the *responsibility* a
+point takes for an exemplar, and the *availability* $$\alpha$$ is what the exemplar
+offers back. Here $$\beta_{ij} = s_{ij} + \alpha_{ij}$$, which is why the belief is
+$$\beta + \rho - s$$. Frey and Dueck introduced the pair. Givoni and Frey's binary variable model is the
+derivation the [original MASDA
 post](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/#masda)
 follows.
 
@@ -127,9 +128,9 @@ right target and max-sum is the right algorithm.
 
 *Convergence* here means the messages stop changing. *Anytime* means the algorithm
 can be stopped at any iteration and still return a usable answer, improving with
-time. The most useful thing this project measured is that the two are far apart:
-the messages are still moving at iteration thirty while the decision stopped moving
-around iteration two, so the shipping configuration runs two iterations
+time. The most useful thing this project measured is that the two are far apart. The
+messages are still moving at iteration thirty. The decision stopped moving around
+iteration two, so the shipping configuration runs two
 ([section 4.3](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#43-two-iterations-against-thirty)). Being anytime is also the
 property an exact assignment solver lacks.
 
@@ -158,8 +159,8 @@ This part reuses those equations unchanged and substitutes stereo's nouns
 Sum-Product Algorithm Data Association: the same factor graph solved with
 sum-product, returning marginal association *probabilities* instead of one
 assignment. The right choice when a downstream consumer wants soft weights, and
-more expensive. Williams and Lau are the reference treatment; the comparison with
-MASDA is [in the original
+more expensive. Williams and Lau are the reference treatment. The comparison with MASDA is [in the
+original
 post](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/#spada-sum-product-algorithm-data-association-and-masda-max-sum-algorithm-data-association).
 
 > J. Williams, R. Lau (2014). *Approximate evaluation of marginal association
@@ -201,10 +202,10 @@ that is the argument of [section 5](https://www.mariolueder.com/2026-08-07-MASDA
 
 The exact LAP solvers. Kuhn's Hungarian method is the classical one; the
 Jonker-Volgenant shortest-augmenting-path algorithm is the fast modern variant and
-the one behind `scipy.optimize.linear_sum_assignment`. Used here as ground truth
-for the *optimisation*, separately from ground truth for the *answer*:
-[section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum) runs per-row JV over every row of two
-scenes and finds MASDA's precision indistinguishable from exact.
+the one behind `scipy.optimize.linear_sum_assignment`. Used here as ground truth for the *optimisation*, which is separate from ground
+truth for the *answer*.
+[Section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum) runs per-row JV over every row of two
+scenes, and finds MASDA's precision indistinguishable from exact.
 
 > H. W. Kuhn (1955). *The Hungarian method for the assignment problem.* Naval
 > Research Logistics Quarterly 2(1-2), 83-97.
@@ -235,17 +236,17 @@ the theory.
 
 The total score of MASDA's assignment divided by the exact optimum's, per row —
 1.0 meaning "MASDA found an optimal assignment". Reported alongside precision in
-[section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum) because the two disagree so
-instructively: closing an 0.8% objective gap buys no precision at all, which makes
+[section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum), because the two disagree
+instructively. Closing an 0.8% objective gap buys no precision at all. That makes
 the objective a demonstrably loose proxy for the quantity a consumer experiences.
 
 ### Greedy decode
 
 The read-out rule: order candidates by [belief](#belief), accept a pair when both
 sides agree and the score beats $$\lambda$$, then fill in what remains greedily by
-belief. Not cosmetic — under near-ties every row's best belief points at the same
-column, so mutual agreement alone commits one pair per row, and every greedily
-accepted edge still raises the objective ([section 3.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#31-reading-out-the-answer)).
+belief. Not cosmetic. Under near-ties every row's best belief points at the same column, so
+mutual agreement alone commits one pair per row. Every edge the fill then accepts
+still raises the objective ([section 3.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#31-reading-out-the-answer)).
 
 ### Margin and the margin gate
 
@@ -267,22 +268,25 @@ read from the cost curve cannot see the case where the answer was never on the c
 
 Both message updates need "the maximum over this row except column $$j$$", which is
 quadratic if computed per element and constant time if the largest and
-second-largest are cached. On an edge list the same thing is a *segment reduction*
-— a scatter-max over the edges grouped by endpoint (`np.maximum.at` in NumPy),
-plus the count of elements attaining the maximum so ties are handled rather than
-ignored. This is the whole trick that makes the sparse form $$O(E)$$;
-[section 3.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation)
+second-largest are cached. On an edge list the same thing is a *segment reduction*: a scatter-max over the
+edges grouped by endpoint, `np.maximum.at` in NumPy. It also needs the count of
+elements attaining the maximum, so that ties are handled rather than ignored.
+
+This is the whole trick that makes the sparse form $$O(E)$$.
+[Section 3.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation)
 gives the ten lines.
 
 ### Ordering constraint
 
 Along a rectified scanline, correspondences of an opaque surface preserve left-right
-order: matches should not cross. Scanline dynamic programming gets this for free —
-it is the classical argument for DP-based stereo, going back to Ohta and Kanade —
-and a plain assignment formulation does not, which makes it the standing objection
-to using MASDA here. [Section 6](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#6-can-masda-express-the-ordering-constraint)
-derives it as a pairwise factor costing one clamped scalar per conflicting edge,
-verifies the closed form against brute-force max-sum, and then measures it as a
+order: matches should not cross. Scanline dynamic programming gets this for free, which is the classical argument
+for DP-based stereo, going back to Ohta and Kanade. A plain assignment formulation
+does not, and that is the standing objection to using MASDA here.
+
+[Section 6](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#6-can-masda-express-the-ordering-constraint)
+answers it in three steps. It derives the constraint as a pairwise factor costing
+one clamped scalar per conflicting edge. It verifies that closed form against
+brute-force max-sum. It then measures the factor as a
 real but poor trade on the dense problem. Note that thin foreground objects
 genuinely violate ordering, which is why $$\kappa$$ stays finite and why DP methods
 need forbidden-move exceptions.
@@ -294,10 +298,10 @@ need forbidden-move exceptions.
 ### Fenwick tree
 
 A binary indexed tree: prefix sums and prefix counts in $$O(\log n)$$ with an array
-and no pointers. It is the standard way to count crossing pairs without enumerating
-them, and in [section 6.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#61-measured-dense-it-works-and-it-costs-more-than-it-returns)
-it turns from an optimisation into a precondition — with ~2400 crossing pairs per
-row, the quadratic enumeration is the cost.
+and no pointers. It is the standard way to count crossing pairs without enumerating them. In
+[section 6.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#61-measured-dense-it-works-and-it-costs-more-than-it-returns)
+it turns from an optimisation into a precondition: with about 2,400 crossing pairs
+per row, the quadratic enumeration is the whole cost.
 
 > P. M. Fenwick (1994). *A new data structure for cumulative frequency tables.*
 > Software: Practice and Experience 24(3), 327-336.
@@ -305,14 +309,16 @@ row, the quadratic enumeration is the cost.
 
 ### Sinkhorn, optimal transport and SuperGlue
 
-The soft-assignment cousin of this formulation. Optimal transport asks for a
-one-to-one-ish coupling between two distributions; adding an entropy term makes it
-solvable by Sinkhorn's alternating row-and-column normalisation, and *dustbin* rows
-and columns give unmatched items somewhere to go — which is $$\lambda$$ and
-$$\gamma$$ under another name. Max-sum is the zero-temperature limit of that
-relaxation. SuperGlue is the influential learned instance: same structure, but the
+The soft-assignment cousin of this formulation. Optimal transport asks for a one-to-one-ish coupling between two distributions.
+Adding an entropy term makes it solvable by Sinkhorn's alternating row-and-column
+normalisation. *Dustbin* rows and columns give unmatched items somewhere to go,
+which is $$\lambda$$ and $$\gamma$$ under another name. Max-sum is the
+zero-temperature limit of that relaxation.
+
+SuperGlue is the influential learned instance. The structure is the same, but the
 scores come from an attention network and the dustbin costs are learned rather than
-hand-set, which is exactly the weakness [section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it)
+hand-set. That is exactly the weakness
+[section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it)
 admits to.
 
 > M. Cuturi (2013). *Sinkhorn Distances: Lightspeed Computation of Optimal
@@ -328,12 +334,13 @@ admits to.
 
 Two cameras viewing one point define an *epipolar* geometry: the point's possible
 positions in the second image lie on a line determined by the first image's
-position. *Rectification* warps both images so those lines become the same
-horizontal row in both, which collapses the correspondence search from
-two-dimensional to one-dimensional and makes every image row an independent
-problem — the property that makes this matcher embarrassingly parallel and, in
-Part 3, a GPU kernel. Hartley and Zisserman's book is the standard treatment; Loop
-and Zhang is the classic algorithm.
+position. *Rectification* warps both images so those lines become the same horizontal row in
+both. That collapses the correspondence search from two dimensions to one, and
+makes every image row an independent problem. Row independence is what makes this
+matcher embarrassingly parallel, and in Part 3 a GPU kernel.
+
+Hartley and Zisserman's book is the standard treatment. Loop and Zhang is the
+classic algorithm.
 
 > C. Loop, Z. Zhang (1999). *Computing rectifying homographies for stereo vision.*
 > CVPR. [doi:10.1109/CVPR.1999.786928](https://doi.org/10.1109/CVPR.1999.786928)
@@ -343,28 +350,32 @@ and Zhang is the classic algorithm.
 The horizontal offset between a point's two projections, $$d = x_L - x_R$$, in
 pixels. It is inverse depth: $$Z = fB/d$$ for focal length $$f$$ and baseline
 $$B$$, so one disparity step is a large distance change far away and a small one up
-close. $$D$$ throughout this series is the number of disparities searched (64 on
-the camera, up to 80 on the benchmark scenes), and a *disparity plane* is the
-whole image scored at one fixed $$d$$. 64 is not a tuning choice: the GPU pads a
-pixel's disparity run to a multiple of 64, so every $$D$$ from 1 to 64 costs the
-same and asking for fewer buys nothing.
+close. $$D$$ throughout this series is the number of disparities searched: 64 on the
+camera, up to 80 on the benchmark scenes. A *disparity plane* is the whole image
+scored at one fixed $$d$$.
+
+64 is not a tuning choice. The GPU pads a pixel's disparity run to a multiple of
+64, so every $$D$$ from 1 to 64 costs the same, and asking for fewer buys
+nothing.
 
 ### Occlusion
 
 A surface visible in one camera and hidden in the other, so a correct match simply
 does not exist. It affects 10–20% of pixels on these scenes, concentrated at depth
-discontinuities — which is where stereo is hardest anyway — and it has a second, purely
-geometric form at the frame edge: a pixel at column $$x$$ can only be searched over
-disparities up to $$x$$, so near objects at the left border have their match off the
-sensor entirely — and it is the reason
-[clutter and misdetection](#clutter-and-misdetection) have to be part of the model
-rather than a threshold bolted on afterwards.
+discontinuities, which is where stereo is hardest anyway.
+
+It has a second form at the frame edge, and that one is purely geometric. A pixel
+at column $$x$$ can only be searched over disparities up to $$x$$. So a near object
+at the left border has its match off the sensor entirely.
+
+Occlusion is the reason [clutter and misdetection](#clutter-and-misdetection) have
+to be part of the model, rather than a threshold applied afterwards.
 
 ### Cost volume
 
 The $$W \times H \times D$$ array holding a matching score for every (pixel,
-disparity) pair: at $$D=64$$, 43 MB per frame at 450×375 and 104 MB at 848×480 in
-float, half of each once the scores are [Q14](#q14-fixed-point) int16. Building it,
+disparity) pair. At $$D=64$$ that is 43 MB per frame at 450×375, and 104 MB at
+848×480, in float. Both halve once the scores are [Q14](#q14-fixed-point) int16. Building it,
 aggregating it, then reading it back to pick winners is the textbook four-stage
 pipeline codified in Scharstein and Szeliski's taxonomy. Part 2's second section is
 about never materialising it — with two candidates per pixel, the running top-2
@@ -378,12 +389,14 @@ about never materialising it — with two candidates per pixel, the running top-
 
 A local binary descriptor: compare each neighbour in a window against the centre
 pixel and keep one bit per comparison. A 7×7 window has 48 neighbours, so the
-descriptor fits a `uint64`. Its value here is that it depends only on the *order*
-of intensities, not their values, so it survives the gain and offset differences
-between two real sensors — the property Hirschmüller and Scharstein measured across
-matching costs under radiometric change. The *centre-symmetric* variant compares
-opposing neighbour pairs instead, halving the bits; Part 2 measured it as worth 10%
-runtime on the Jetson and 1.2 points of accuracy, and left it off.
+descriptor fits a `uint64`. Its value here is that it depends only on the *order* of intensities, not on their
+values. It therefore survives the gain and offset differences between two real
+sensors, the property Hirschmüller and Scharstein measured across matching costs
+under radiometric change.
+
+The *centre-symmetric* variant compares opposing neighbour pairs instead, which
+halves the bits. Part 2 measured it as worth 10% of runtime on the Jetson and 1.2
+points of accuracy, and left it off.
 
 > R. Zabih, J. Woodfill (1994). *Non-parametric local transforms for computing
 > visual correspondence.* ECCV, LNCS 801, 151-158.
@@ -424,11 +437,12 @@ $$\tilde{C}(x, y, d) \;=\; \sum_{(u,v)} w\big((x,y),(u,v)\big) \; C(u, v, d)$$
 
 The sum runs over **positions**, at a fixed disparity $$d$$. It never averages across
 disparities, which is why the implementation needs a whole constant-disparity plane in
-memory and why two of Part 2's negative results follow from that one constraint. It is the third stage of the
-classical taxonomy and, on this project, the single largest accuracy lever: one
-7×7 Census comparison quantises to 49 levels, and Part 2 measured unaggregated
-scores at 28.1% bad against 12.7% for SGM stripped of its smoothness term
-entirely. In factor-graph language, better unaries beat a cheap pairwise term —
+memory, and why two of Part 2's negative results follow from that one constraint.
+
+It is the third stage of the classical taxonomy, and on this project the single
+largest accuracy lever. One 7×7 Census comparison quantises to 49 levels, and Part 2
+measured unaggregated scores at 28.1% bad against 12.7% for SGM stripped of its
+smoothness term entirely. In factor-graph language, better unaries beat a cheap pairwise term —
 which is also why the cheap smoothness factor is a recorded negative result.
 
 ### Edge-aware recursive filter
@@ -448,9 +462,8 @@ On a flat surface $$a$$ is constant, so a pixel $$k$$ steps away contributes $$a
 and the weight falls to $$1/e$$ after $$\sigma_s/\sqrt{2}$$ pixels — 5.7 px at the
 shipping $$\sigma_s = 8$$. Each pass is one multiply-add per pixel, so the cost is
 $$O(1)$$ per pixel whatever the reach, which is why the reach can be large and why
-$$\sigma_s$$ is free to tune. The
-family it belongs to is the domain-transform and non-local aggregation line of
-work; the exact recurrence, the integer coefficients and the truncation matter here
+$$\sigma_s$$ is free to tune. It belongs to the domain-transform and non-local aggregation line of work. The
+exact recurrence, the integer coefficients and the truncation all matter here,
 because Part 3 reproduces them bit-for-bit on the GPU.
 
 > E. S. L. Gastal, M. M. Oliveira (2011). *Domain transform for edge-aware image
@@ -465,9 +478,9 @@ because Part 3 reproduces them bit-for-bit on the GPU.
 A pairwise term that penalises disparity differences between neighbouring pixels,
 on the argument that surfaces are mostly continuous. It is the mechanism
 [SGM](#semi-global-matching) is built on, and the one this factor graph does *not*
-have. Two cheap versions were tried here and are recorded as negatives — worse at
-every weight — with the mechanism: on a quantised Census volume the information a
-neighbour smoothness term would add is better added by
+have. Two cheap versions were tried here and are recorded as negatives, worse at every
+weight. The mechanism is the reason: on a quantised Census volume, the information
+a neighbour smoothness term would add is better added by
 [aggregating the unaries](#cost-aggregation). The interesting unbuilt object is a
 graph carrying both uniqueness and path smoothness at once
 ([section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it)).
@@ -475,9 +488,9 @@ graph carrying both uniqueness and path smoothness at once
 ### Winner-take-all
 
 Take each pixel's best-scoring disparity and stop — no uniqueness, no interaction
-between pixels. It is the baseline every stereo matcher has to beat, and the
-comparison that isolates what the [one-to-one constraint](#one-to-one-constraint)
-contributes, because it can be run on *identical* scores
+between pixels. It is the baseline every stereo matcher has to beat. It is also the comparison that
+isolates what the [one-to-one constraint](#one-to-one-constraint) contributes,
+because it can be run on *identical* scores
 ([section 4.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#41-what-uniqueness-is-worth)): 0.776 precision against MASDA's
 0.884.
 
@@ -487,10 +500,9 @@ SGM: the standard fast dense matcher. It aggregates a smoothness penalty along
 several one-dimensional paths across the image and sums the results, approximating
 a 2-D energy at 1-D cost. It has **no uniqueness constraint** — a
 [left-right consistency check](#left-right-consistency-check) is added afterwards,
-which costs a second matcher run — and no native confidence. It is the direct
-competitor here, measured in Part 2 at 29.1% bad-1.0 on Middlebury v3 against dense
-MASDA's 24.5%, and at 10.9% against 9.8% on the older eight-scene benchmark — with
-SGM answering ten points more pixels in both.
+which costs a second matcher run — and no native confidence. It is the direct competitor here. Part 2 measures it at 29.1% bad-1.0 on Middlebury
+v3 against dense MASDA's 24.5%, and at 10.9% against 9.8% on the older eight-scene
+benchmark. SGM answers ten points more pixels in both.
 The two mechanisms are orthogonal, and a factor graph carrying both uniqueness and
 path smoothness is the interesting object neither tool implements today.
 
@@ -503,9 +515,9 @@ path smoothness is the interesting object neither tool implements today.
 Match left-to-right, match right-to-left, and keep only the pixels where the two
 agree. The standard way to detect occlusions and mismatches after the fact, and the
 standard way to get uniqueness without modelling it — at the price of running the
-matcher twice. MASDA gets the *uniqueness* inside one inference pass, but not the
-occlusion detection: a left pixel whose true partner lies outside the right image has
-no competitor to lose to, so uniqueness leaves it alone. Measured on the camera,
+matcher twice. MASDA gets the *uniqueness* inside one inference pass, but not the occlusion
+detection. A left pixel whose true partner lies outside the right image has no
+competitor to lose to, so uniqueness leaves it alone. Measured on the camera,
 raising the message-passing iterations there increased the number of points on a
 demonstrably false surface rather than suppressing them. The two properties are
 usually named together and are not the same property.
@@ -517,19 +529,21 @@ usually named together and are not the same property.
 ### Sub-pixel disparity
 
 Fitting a curve to the scores around the winning integer disparity to recover a
-fractional answer. It is the refinement stage of the classical taxonomy and it
-matters more for metric depth accuracy than anything else downstream — and it is
-not implemented here, which [section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it) records as an
-open item rather than a detail.
+fractional answer. It is the refinement stage of the classical taxonomy, and it matters more for
+metric depth accuracy than anything else downstream. It is not implemented here,
+which [section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it)
+records as an open item rather than a detail.
 
 ### Coarse-to-fine
 
-Solve at half resolution, upsample the answer, and search only a narrow band around
-it at full resolution — a pyramid strategy, and the family every fast published CPU
-matcher belongs to in some form. Part 2 measured the ceiling first (81.5% of
-known pixels keep the truth inside a ±2 band), then the delivery: 5.2×
-less arithmetic, 1.2–1.4× faster on the desktop, and *flat* on the Jetson, for
-three specific reasons that are the most useful negative result in the series.
+Solve at half resolution, upsample the answer, then search only a narrow band
+around it at full resolution. It is a pyramid strategy, and every fast published
+CPU matcher belongs to the family in some form.
+
+Part 2 measured the ceiling first: 81.5% of known pixels keep the truth inside a ±2
+band. Then it measured the delivery — 5.2× less arithmetic, 1.2–1.4× faster on the
+desktop, and *flat* on the Jetson. The three reasons for that flatness are the most
+useful negative result in the series.
 
 ### Repetitive texture and ambiguity
 
@@ -543,24 +557,28 @@ It is also why the gain from uniqueness is largest exactly where the scene is wo
 ### Disparity-major and disparity-minor layout
 
 Two ways to index the cost volume: `[d][x]` keeps whole constant-disparity planes
-contiguous, `[x][d]` keeps each pixel's run of disparities contiguous. The choice
-is not a style question but a memory-system question, and Parts 2 and 3 answer it
-in *opposite* directions — the CPU wants planes resident in L2, the GPU wants the
-innermost index to be the one a warp spans. Part 3's section 4 is the resolution:
-neither layout is wrong; trying to make one implementation serve both was.
+contiguous, `[x][d]` keeps each pixel's run of disparities contiguous. The choice is not a style question but a memory-system question, and Parts 2 and 3
+answer it in *opposite* directions. The CPU wants whole planes resident in L2. The
+GPU wants the innermost index to be the one a warp spans.
+
+Part 3's section 4 is the resolution. Neither layout is wrong. Trying to make one
+implementation serve both was.
 
 ## Datasets and metrics
 
 ### Middlebury stereo datasets
 
 The standard rectified stereo benchmark with dense ground truth. This series uses
-Teddy and Cones from the 2003 set and the six 2005 scenes (Art, Books, Dolls,
-Laundry, Moebius, Reindeer) at third size, whose [dataset
-page](https://vision.middlebury.edu/stereo/data/) grants permission to use and
-publish the images and disparity maps. The images are not redistributed in this
-repository; [section 2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#2-ground-truth) also documents the disparity scale factor
-of 3 being *established* by an identity check rather than assumed, because the 2005
-archives do not document it.
+Teddy and Cones from the 2003 set, and the six 2005 scenes at third size: Art,
+Books, Dolls, Laundry, Moebius and Reindeer. Their
+[dataset page](https://vision.middlebury.edu/stereo/data/) grants permission to use
+and publish the images and disparity maps. They are not redistributed in this
+repository.
+
+The 2005 archives do not document their disparity scale.
+[Section 2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#2-ground-truth)
+therefore *establishes* the factor of 3 with an identity check rather than assuming
+it.
 
 > D. Scharstein, R. Szeliski (2003). *High-accuracy stereo depth maps using
 > structured light.* CVPR, 195-202.
@@ -571,12 +589,14 @@ archives do not document it.
 
 ### Structured-light ground truth
 
-How that ground truth was made: project coded light patterns onto the scene so
-every surface point identifies itself, and the correspondence becomes
-unambiguous — accurate to about a quarter pixel here, with a few percent of pixels
-left unknown. Those unknowns are marked as disparity zero rather than by a separate
-mask, which is why [section 2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#2-ground-truth) excludes them from precision
-instead of scoring them as wrong.
+How that ground truth was made. Coded light patterns are projected onto the scene,
+so every surface point identifies itself and the correspondence becomes
+unambiguous. It is accurate to about a quarter pixel here, and leaves a few per cent
+of pixels unknown.
+
+Those unknowns are marked as disparity zero rather than by a separate mask. That is
+why [section 2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#2-ground-truth)
+excludes them from precision instead of scoring them as wrong.
 
 ### Coverage, precision and the bad pixel rate
 
@@ -593,10 +613,10 @@ how a matcher that mostly abstains looks excellent.
 ### Interleaved best-of-N
 
 The timing protocol on the Jetson: run the variants alternately within one session
-and take each one's minimum, rather than running all of A then all of B. The board's
-run-to-run variance is 37% at locked clocks and stable temperature, because six
-heterogeneous cores get scheduled differently each run, so a single measurement is
-worthless and consecutive blocks let drift masquerade as an effect.
+and take each one's minimum, rather than running all of A then all of B. The board's run-to-run variance is 37%, at locked clocks and stable temperature,
+because six heterogeneous cores get scheduled differently each run. A single
+measurement is therefore worthless. Running all of A then all of B lets drift
+masquerade as an effect.
 
 ## The matchers and methods this one is measured against
 
@@ -635,11 +655,14 @@ be".
 ### ReS2tAC
 
 Real-time SGM on exactly the hardware class this project targets — embedded ARM
-with NEON, and CUDA on Jetson-class GPUs. Two of its design decisions were
-re-derived independently here before being recognised: putting *disparity* in the
-SIMD lanes rather than pixels (Part 2's NEON kernel) and the same assignment for
-CUDA warps (Part 3's layout). It is the closest published prior art to this
-pipeline's engineering, on both processors.
+with NEON, and CUDA on Jetson-class GPUs. Two of its design decisions were re-derived independently here before being
+recognised:
+
+- *disparity* in the SIMD lanes rather than pixels, which is Part 2's NEON kernel;
+- the same assignment for CUDA warps, which is Part 3's layout.
+
+It is the closest published prior art to this pipeline's engineering, on both
+processors.
 
 > B. Ruf, J. Mohrs, M. Weinmann, S. Hinz, J. Beyerer (2021). *ReS2tAC — UAV-Borne
 > Real-Time SGM Stereo Optimized for Embedded ARM and CUDA Devices.* Sensors
@@ -649,20 +672,22 @@ pipeline's engineering, on both processors.
 
 A representation from Tomasi & Manduchi (1998) in which a scanline is a *trajectory* in
 a small feature space — intensity and its derivative along the row — rather than a
-sequence of pixels. Matching becomes a nearest-neighbour query in that space: the
-candidate disparities for a left pixel are the right pixels lying close to it on the
-curve, which can be found with a spatial index instead of by sweeping every disparity.
+sequence of pixels. Matching becomes a nearest-neighbour query in that space. A left pixel's candidate
+disparities are the right pixels lying close to it on the curve, and a spatial index
+finds those without sweeping every disparity.
 
-Shahbazi et al. (2016) revisit it as a search-space reduction, reporting an 83%
-per-pixel reduction of the disparity range at full resolution with no hierarchical
+Shahbazi et al. (2016) revisit it as a search-space reduction. They report an 83%
+per-pixel reduction of the disparity range at full resolution, with no hierarchical
 search, followed by SGM over the survivors.
 
-Measured in [Part 2][p2-icsg] on this project's data, the reduction reproduces — 13.9%
-of the range admitted per pixel — and does not help, because the admitted disparities
-of neighbouring pixels do not agree: the union over a 4×4 tile is 43.6% of the range.
-A per-pixel, spatially incoherent reduction is spendable by a matcher that scores
-candidates individually, which is what that paper's SGM does, and not by one that
-aggregates costs over whole constant-disparity planes.
+Measured in [Part 2][p2-icsg] on this project's data, the reduction reproduces:
+13.9% of the range is admitted per pixel. It does not help. The admitted disparities
+of neighbouring pixels do not agree, and the union over a 4×4 tile is 43.6% of the
+range.
+
+A per-pixel reduction that is spatially incoherent can be spent by a matcher scoring
+candidates individually, which is what that paper's SGM does. It cannot be spent by
+one that aggregates costs over whole constant-disparity planes.
 
 > Tomasi, C. & Manduchi, R. (1998). *Stereo Matching as a Nearest-Neighbor Problem.*
 > IEEE TPAMI 20(3):333-340. [doi:10.1109/34.667884](https://doi.org/10.1109/34.667884)
@@ -686,10 +711,10 @@ work behind this pipeline's aggregation stage.
 ### GPU-efficient recursive filtering
 
 The standard way to parallelise a recurrence on a GPU: algebraically reassociate it
-into blocks so the blocks can run concurrently. Part 3 could not use it — the
-reassociation does not reproduce the CPU's integer truncation bit-for-bit, and
-bit-identity was the referee — and the entry is here because that paper's existence
-is also the explanation of why the warp-serial alternative loses.
+into blocks so the blocks can run concurrently. Part 3 could not use it. The reassociation does not reproduce the CPU's integer
+truncation bit-for-bit, and bit-identity was the referee. The entry is here because
+the existence of that paper is also the explanation of why the warp-serial
+alternative loses.
 
 > D. Nehab, A. Maximo, R. S. Lima, H. Hoppe (2011). *GPU-Efficient Recursive
 > Filtering and Summed-Area Tables.* ACM TOG 30(6), SIGGRAPH Asia.
@@ -700,34 +725,34 @@ is also the explanation of why the warp-serial alternative loses.
 ### Jetson TX2
 
 The target board: an NVIDIA Tegra X2 module with six ARM cores, a 256-core Pascal
-GPU, and one LPDDR4 memory system shared between them. Everything in Parts 2 and 3
-that is surprising traces back to that last clause — the CPU and the GPU compete
-for the same bandwidth, and the board's memory streams are its weakest point
+GPU, and one LPDDR4 memory system shared between them. Everything in Parts 2 and 3 that is surprising traces back to that last clause. The
+CPU and the GPU compete for the same bandwidth, and the board's memory streams are
+its weakest point
 relative to a desktop. [NVIDIA's developer
 page](https://developer.nvidia.com/embedded/jetson-tx2) is the specification.
 
 ### A57 and Denver cores
 
 The six cores are not identical: four ARM Cortex-A57s and two of NVIDIA's own
-Denver cores, a wider design with dynamic code optimisation. Heterogeneity is why
-run-to-run variance is 37% ([interleaved best-of-N](#interleaved-best-of-n)) and
-why thread pinning has *opposite* signs in the two tools — Part 3 measures pinning
-the solve to the A57 cluster as essential for the GPU pipeline and 40% worse for the
-CPU-only matcher, which needs the Denvers' throughput.
+Denver cores, a wider design with dynamic code optimisation. Heterogeneity is why run-to-run variance is 37%
+([interleaved best-of-N](#interleaved-best-of-n)). It is also why thread pinning has
+*opposite* signs in the two tools. Part 3 measures pinning the solve to the A57
+cluster as essential for the GPU pipeline, and 40% worse for the CPU-only matcher,
+which needs the Denvers' throughput.
 
 ### RealSense D435 and the IR pair
 
-The camera this project is built around: an Intel RealSense D435, used not for its
-own depth output but for its two infrared cameras as a raw stereo pair at
-848×480 — which is where that resolution, and the 33.3 ms frame budget, come from.
+The camera this project is built around. It is an Intel RealSense D435, used not
+for its own depth output but for its two infrared cameras, as a raw stereo pair at
+848×480. That is where the resolution, and the 33.3 ms frame budget, come from.
 [Product page](https://www.intelrealsense.com/depth-camera-d435/).
 
 ### Vector lanes
 
 A SIMD register is one wide register divided into equal slices, and a *lane* is one
-of those slices. A 128-bit register holds 16 `int8` lanes, 8 `int16` lanes or 4
-`int32` lanes, and one instruction applies the same operation to every lane at
-once — lane 3 of the result depends only on lane 3 of the inputs. So the design
+of those slices. A 128-bit register holds 16 `int8` lanes, 8 `int16` lanes or 4 `int32` lanes. One
+instruction applies the same operation to every lane at once, and lane 3 of the
+result depends only on lane 3 of the inputs. So the design
 question in any SIMD kernel is *what does a lane mean*: which axis of the problem
 you spread across the register. Put eight **pixels** in the lanes and the
 neighbouring per-pixel table lookups stay scalar gathers, which is the version that
@@ -749,10 +774,9 @@ handles eight pixels.
 
 *NEON* is ARM's SIMD instruction set, present on every ARMv8 core including the
 Jetson's, with 128-bit registers — so eight `int16` lanes per instruction, against
-the 256 bits of the desktop's AVX2. That factor of two is the whole reason
-switching the pipeline from `int32` to `int16` was worth 20% on the Jetson and
-nothing on the desktop: on the wider machine the score already fit with lanes to
-spare. NEON is used through C *intrinsics* — functions like `vaddq_s16` that the
+the 256 bits of the desktop's AVX2. That factor of two is the whole reason switching the pipeline from `int32` to
+`int16` was worth 20% on the Jetson and nothing on the desktop. On the wider
+machine the score already fit, with lanes to spare. NEON is used through C *intrinsics* — functions like `vaddq_s16` that the
 compiler turns into one instruction each, so the kernel stays C rather than
 assembly. The one that mattered here is `vqtbl4q_u8`, a table lookup across four
 registers at once, which turned the score loop's two per-pixel lookup tables into
@@ -768,21 +792,20 @@ is the introduction.
 ### Q14 fixed point
 
 Integer arithmetic standing in for fractions: an `int16` holding a value scaled by
-$$2^{14}$$, so $$[-2, 2)$$ is representable to about $$6 \times 10^{-5}$$. The
-score is naturally in $$[-1, 1]$$, so it fits with headroom to spare, and the whole
-pipeline stays integer — which is what makes bit-identity between CPU and GPU
-achievable at all, since integer arithmetic has no reassociation freedom.
+$$2^{14}$$, so $$[-2, 2)$$ is representable to about $$6 \times 10^{-5}$$. The score is naturally in $$[-1, 1]$$, so it fits with headroom to spare, and the
+whole pipeline stays integer. That is what makes bit-identity between CPU and GPU
+achievable at all, because integer arithmetic has no reassociation freedom.
 
 ### Warp, coalescing and shuffle
 
-A CUDA *warp* is 32 threads executing together. *Coalescing* is the hardware
-merging their memory accesses into as few aligned transactions as possible — 32
-consecutive addresses become one 128-byte transaction, while a strided pattern
-becomes 32 of them, which is the entire reason Part 3's volume is indexed
-disparity-minor. A *shuffle* (`__shfl_down_sync`) exchanges registers directly
-between lanes of a warp, and is how the top-2 reduction works — including the
-tie-break bug in Part 3's section 6, which follows from the shuffle tree merging
-non-adjacent ranges. The
+A CUDA *warp* is 32 threads executing together. *Coalescing* is the hardware merging their memory accesses into as few aligned
+transactions as possible. 32 consecutive addresses become one 128-byte transaction,
+while a strided pattern becomes 32 of them. That is the entire reason Part 3's
+volume is indexed disparity-minor.
+
+A *shuffle* (`__shfl_down_sync`) exchanges registers directly between lanes of a
+warp, and is how the top-2 reduction works. It is also where the tie-break bug in
+Part 3's section 6 comes from, since the shuffle tree merges non-adjacent ranges. The
 [CUDA C++ Programming Guide](https://docs.nvidia.com/cuda/cuda-c-programming-guide/)
 is the reference.
 
@@ -797,31 +820,31 @@ the lookup tables there was worth ~2 ms in Part 3.
 ### Pinned memory and I/O coherency
 
 *Pinned* (page-locked) host memory is what a GPU DMA engine can copy without the
-CPU's involvement, and on discrete GPUs it is also fast for the CPU to read. On the
-TX2 it is not: the SoC has no I/O coherency, so every `cudaHostAlloc` flavour —
-including the one whose name suggests otherwise — is uncached from the CPU's side,
-and a solver reading candidates out of it runs about seven times slower than from
-ordinary pageable memory. The fix is a staged copy into a plain `std::vector`, and
+CPU's involvement, and on discrete GPUs it is also fast for the CPU to read. On the TX2 it is not. The SoC has no I/O coherency, so every `cudaHostAlloc`
+flavour is uncached from the CPU's side, including the one whose name suggests
+otherwise. A solver reading candidates out of it runs about seven times slower than
+from ordinary pageable memory. The fix is a staged copy into a plain `std::vector`, and
 NVIDIA's [CUDA for Tegra
 notes](https://docs.nvidia.com/cuda/cuda-for-tegra-appnote/index.html) document the
 memory-coherency model this violates.
 
 ### Kernel fusion
 
-Merging two passes so the intermediate never reaches memory. The principle Part 3
-states — *a pass that stores exactly what the next pass reads is a fusion
-candidate, and a store nothing reads afterwards is a bug you are paying for* —
-found time three times on the GPU and *nothing* on the CPU, where the intermediate
-plane was already L2-resident. Same transformation, opposite verdict — the series'
-thesis in one experiment.
+Merging two passes so the intermediate never reaches memory. Part 3 states the principle as: *a pass that stores exactly what the next pass
+reads is a fusion candidate, and a store nothing reads afterwards is a bug you are
+paying for.*
+
+It found time three times on the GPU, and *nothing* on the CPU, where the
+intermediate plane was already resident in L2. Same transformation, opposite
+verdict, and the series' thesis in one experiment.
 
 ### Bandwidth bound
 
 A kernel is bandwidth bound when its runtime is set by bytes moved rather than
-arithmetic performed. Dividing each kernel's bytes by its measured time and
-comparing against what the board actually achieves (~35–40 GB/s here) turns
-optimisation from guesswork into arithmetic: a kernel at 19 GB/s is leaving half
-the machine idle, and it also says when to *stop*. The roofline model is the formal
+arithmetic performed. Divide each kernel's bytes by its measured time, and compare against what the board
+actually achieves, which is 35–40 GB/s here. That turns optimisation from guesswork
+into arithmetic. A kernel at 19 GB/s is leaving half the machine idle, and the same
+number says when to *stop*. The roofline model is the formal
 version of this reasoning.
 
 > S. Williams, A. Waterman, D. Patterson (2009). *Roofline: an insightful visual
@@ -831,9 +854,9 @@ version of this reasoning.
 ### Amdahl's law
 
 The speedup available from parallelising a program is capped by the part that stays
-serial. Quoted here because it was the answer after five wrong guesses: the workers
-were 5.99 of 6 cores busy while alive, and the missing time was a serial prologue
-and a serial-ish merge *outside* the pool. The instrument that showed it — per-thread
+serial. Quoted here because it was the answer after five wrong guesses. The workers were
+5.99 of 6 cores busy while alive, and the missing time sat in a serial prologue and
+a serial-ish merge *outside* the pool. The instrument that showed it — per-thread
 span printed next to per-thread busy — is the transferable part.
 
 > G. M. Amdahl (1967). *Validity of the single processor approach to achieving
@@ -850,9 +873,10 @@ only if the hot loop stays branch-free.
 ### Bit-identity
 
 Requiring two implementations to produce byte-identical output, checked with `cmp`.
-Part 3 treats it as a design constraint rather than a test — every GPU intermediate
-replicates the CPU's exact integer arithmetic — and it paid twice: a ten-pixel
-tie-break error in 407,040 and a padding bug that silently broke six of eight
-scenes are both invisible to an accuracy benchmark at the scale they occur. The
+Part 3 treats it as a design constraint rather than a test, so every GPU
+intermediate replicates the CPU's exact integer arithmetic. It paid twice. A
+ten-pixel tie-break error in 407,040, and a padding bug that silently broke six of
+eight scenes, are both invisible to an accuracy benchmark at the scale they
+occur. The
 caveat is real too: `cmp` between two *multi-threaded* runs is not an identity
 check, because dynamic work distribution changes which of two equal scores wins.
