@@ -375,6 +375,33 @@ measurements. That includes the ones that went against expectation: the
 [sub-pixel fit][gl-subpix] being worth fifteen points, and the message passing not
 paying for itself in the dense path.
 
+## 7.1 The whole frame in one table
+
+Every stage above, in stream order, with what it consumes and produces. Kernel times
+are measured minima at 848×480 and $$D=64$$; the two fused stages are marked.
+
+| stage | runs on | takes in | gives out | ms |
+|---|---|---|---|---|
+| upload | DMA engine | left and right Y8 | both images in device memory | hidden |
+| `k_census` | GPU | left and right images | 48-bit descriptors | 1.4 |
+| `k_rf_coeffs` | GPU | left-image gradients | filter coefficients | *(with census)* |
+| `k_score_hfwd` **fused** | GPU | descriptors, coefficients | volume, filtered left to right | 8.0 |
+| `k_hbwd` | GPU | that volume | volume, filtered both ways horizontally | 4.5 |
+| `k_vert_fwd` | GPU | that volume | volume, filtered downwards | 3.3 |
+| `k_vert_bwd_top2` **fused** | GPU | that volume | two scored candidates per pixel | 9.7 |
+| fetch | DMA engine | candidates | candidates in pageable host memory | hidden |
+| decode | four A57 cores | candidates of the *previous* frame | disparity and margin per pixel | 11 |
+| detection | a third CPU thread | left image of the previous frame | keypoints, 97.3% carrying a disparity | 0.4–1.4 |
+
+Three conditions make those numbers hold, and each is measured above:
+
+- The decode and the detection run on frame $$t$$ while the kernels run on frame
+  $$t{+}1$$. Without that overlap the frame costs 26.9 + 11 ms instead of 31.7.
+- The decode threads pin themselves to the A57 cluster. Unpinned, the decode varies
+  between 30 and 45 ms.
+- The candidates are fetched into *pageable* host memory. Pinned memory is uncached
+  on this SoC, and a solver reading from it runs about seven times slower.
+
 ## 8. Where this leaves the project
 
 The matcher runs at the camera's full resolution, faster than the camera delivers
