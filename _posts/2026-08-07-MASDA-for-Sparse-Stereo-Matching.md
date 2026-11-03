@@ -877,9 +877,10 @@ right 80% of the time. That is a different exercise from ranking. It is three st
 1. Bin the scores, and measure the empirical error rate in each bin against ground
    truth.
 2. Fit the mapping from score to probability.
-3. Check that the fit survives the move from a dataset to this camera. The literature
-on stereo confidence measures ranks them by area under the sparsification curve, which
-answers the ordering question and stops there.
+3. Check that the fit survives the move from a dataset to this camera.
+
+The literature on stereo confidence measures ranks them by area under the
+sparsification curve, which answers the ordering question and stops there.
 
 **Temporal factors.** The same machinery for frame-to-frame association, where
 the previous frame's solution is a prior. A first prototype (frame $$t$$'s

@@ -15,24 +15,31 @@ This is the dense stereo matcher: a C++14 implementation of [MASDA][gl-masda] �
 [max-sum][gl-maxsum] [loopy belief propagation][gl-lbp] for
 [data association][gl-assoc] — applied to every pixel of an 848×480 infrared pair, on
 a [Jetson TX2][gl-tx2]. [Part 1][p1] derives the message equations and measures the
-[one-to-one constraint][gl-one2one] on sparse keypoints. This post is the algorithm at
-full frame rate: the representation it needs, the parameters that matter, the ones
-that turn out to do nothing, and a set of experiments that ended with a result I did
-not expect about the algorithm the series is named after.
+[one-to-one constraint][gl-one2one] on sparse keypoints. This post is the algorithm at full frame rate. It covers four things:
+
+- the representation it needs;
+- the parameters that matter;
+- the ones that turn out to do nothing;
+- and a set of experiments that ended with a result I did not expect about the
+  algorithm the series is named after.
 
 *Every term is defined in the [series glossary][gl-appendix], with links to the
 original papers. Terms link there on first use.*
 
 The matcher, in one paragraph. Each left pixel is a measurement; its candidate
 "objects" are the right pixels along the same [rectified][gl-rect] row within the
-[disparity][gl-disparity] range. A [Census][gl-census] descriptor plus a
-[truncated absolute difference][gl-tad] scores every (pixel, disparity) pair; an
-edge-aware [recursive filter][gl-rf] [aggregates][gl-agg] those scores; the two
-best-scoring disparities per pixel are kept and everything else is discarded. MASDA
-then solves each row as an assignment problem via its [messages][gl-messages] with [clutter and
-misdetection][gl-clutter], and emits a disparity plus a [margin][gl-margin] — the gap
-between the best and second-best candidate — which is the confidence a downstream
-gate consumes.
+[disparity][gl-disparity] range. Four stages follow:
+
+1. A [Census][gl-census] descriptor plus a
+   [truncated absolute difference][gl-tad] scores every (pixel, disparity) pair.
+2. An edge-aware [recursive filter][gl-rf] [aggregates][gl-agg] those scores.
+3. The two best-scoring disparities per pixel are kept, and everything else is
+   discarded.
+4. MASDA solves each row as an assignment problem, through its
+   [messages][gl-messages] with [clutter and misdetection][gl-clutter].
+
+It emits a disparity and a [margin][gl-margin], the gap between the best and
+second-best candidate. That margin is the confidence a downstream gate consumes.
 
 Where it stands, measured on the fifteen [Middlebury v3][gl-middlebury] training
 scenes under the benchmark's own scoring rules:
@@ -50,10 +57,13 @@ matcher that declines to answer.
 
 ## 1. The cost volume is never built
 
-The textbook pipeline materialises a $$W \times H \times D$$ [cost volume][gl-costvolume]
-— at $$D=64$$ that is 43 MB per frame at 450×375 and 104 MB at 848×480 in float, or
-half of each once the scores are [Q14][gl-q14] int16 — aggregates it, then reads it
-back to pick winners. I built that first, then measured what the solver actually consumes.
+The textbook pipeline materialises a $$W \times H \times D$$
+[cost volume][gl-costvolume], aggregates it, then reads it back to pick winners.
+
+At $$D=64$$ that volume is 43 MB per frame at 450×375, and 104 MB at 848×480, in
+float. Both halve once the scores are [Q14][gl-q14] int16.
+
+I built that first, then measured what the solver actually consumes.
 
 ### 1.1 The score, one pixel at a time
 
@@ -65,10 +75,9 @@ $$\mathcal{C}(p) \;=\; \Big(\, \big[I(q_1) < I(p)\big],\;
 \big[I(q_2) < I(p)\big],\; \dots,\; \big[I(q_{48}) < I(p)\big] \,\Big)$$
 
 For a 7×7 window that is 48 neighbours, so 48 bits packed into a `uint64`. The centre
-pixel is not coded — it is the thing everything is compared against. What survives is
-the *ordering* of brightness in the window, not the brightness itself, which is why the
-descriptor does not care that the two cameras have different gain or that one side of
-the scene is lit more strongly than the other.
+pixel is not coded — it is the thing everything is compared against. What survives is the *ordering* of brightness in the window, not the brightness
+itself. So the descriptor does not care that the two cameras have different gain, or
+that one side of the scene is lit more strongly than the other.
 
 Two descriptors are compared by [Hamming distance][gl-hamming] — count the bits that
 disagree — which is one instruction:
@@ -82,9 +91,11 @@ Here it is on one pixel of Teddy, at its true disparity and 5 px away from it:
 
 The left patch codes to `0xe1c3c71c3c7c`. At the true disparity the right patch differs
 in **2 bits of 48**; five pixels away it differs in **42**, which is closer to inverted
-than to equal. That is the whole matching signal, and the figure is also a fair warning
-about what happens when a patch has no texture: every neighbour on one side of the
-centre, an all-zero code, and no signal at all.
+than to equal. That is the whole matching signal.
+
+The figure is also a fair warning about what happens when a patch has no texture.
+Every neighbour then falls on one side of the centre, the code is all zeros, and
+there is no signal at all.
 
 The distance becomes a score on a fixed scale, positive for agreement:
 
@@ -130,8 +141,8 @@ $$\tilde{C}(x, y, d) \;=\; \sum_{(u,v)} w\big((x,y),(u,v)\big) \; C(u, v, d)$$
 Read the indices carefully, because one detail decides the whole design. The sum runs
 over **positions** $$(u,v)$$. The disparity $$d$$ is fixed. Aggregation averages a
 pixel with its spatial neighbours *at the same disparity*, and never across
-disparities. That is why the code needs a whole *disparity plane* — the entire image
-scored at one fixed $$d$$ — in memory at once, and it is the constraint behind two of
+disparities. A *disparity plane* is the entire image scored at one fixed $$d$$. The code needs a
+whole one of those in memory at once, and that single constraint is behind two of
 the negative results later in this post.
 
 **The weights are not a fixed window.** Averaging across an object boundary is
@@ -212,9 +223,9 @@ example above, before any vertical pass:
 | 88 | 108 | 4 | 0.750 | 0.667 | 0.836 |
 | 89 | 101 | 7 | 0.690 | 0.208 | **0.641** |
 
-Two things to read out of it. At $$x = 82$$ and $$83$$ the image steps by 20 and 26
-grey levels, the coefficient falls to 0.48 and 0.41, and the running value is pulled
-most of the way to the local cost: support does not cross that edge. And at $$x = 89$$
+Two things to read out of it. At $$x = 82$$ and $$83$$ the image steps by 20 and 26 grey levels, and the
+coefficient falls to 0.48 and 0.41. The running value is then pulled most of the way
+to the local cost. Support does not cross that edge. And at $$x = 89$$
 the raw cost collapses to 0.208 — one bad sample — while the filtered value only falls
 to 0.641, because it is still carrying eight neighbours' worth of evidence. That is
 aggregation doing its job in one number.
@@ -315,23 +326,22 @@ Same three samples, same one line of code, no extra memory:
 | **equiangular** | **24.47** | 79.6% |
 | equiangular, Census only (`--ad 0`) | **23.75** | 79.8% |
 
-0.71 points for one line. The third row says the absolute-difference term still costs
-0.72 even with the right estimator, so this is not purely an estimator mismatch —
-fitting on the Census term while *selecting* on the graded cost would collect the
-rest, at the price of a second filtered plane. Not built.
+0.71 points for one line. The third row says the absolute-difference term still costs 0.72 even with the
+right estimator, so this is not purely an estimator mismatch. Fitting on the Census
+term while *selecting* on the graded cost would collect the rest, at the price of a
+second filtered plane. Not built.
 
 Two implementation details matter enough to describe.
 
 **Getting the neighbours back.** The whole point of [never building the volume](#1-the-cost-volume-is-never-built)
 is that the filtered cost volume does not exist, so the two costs the fit needs are gone by the time the winner
-is known. The cost stage now retains a three-wide window around each pixel's *running*
-best — when a new best is set, the previous plane's value is its left neighbour, and
-the next plane's value is its right. That only works if the disparity planes arrive in
+is known. The cost stage now retains a three-wide window around each pixel's *running* best.
+When a new best is set, the previous plane's value becomes its left neighbour, and
+the next plane's value becomes its right. That only works if the disparity planes arrive in
 order within a thread, which means the cost stage hands each worker a contiguous range
-of disparities instead of stealing single planes. Sizing those ranges by *work* rather
-than by plane count matters, because a plane's cost is proportional to its valid width
-$$W - 6 - d$$ and shrinks as $$d$$ grows; equal plane counts would leave the low-$$d$$
-worker holding the most.
+of disparities instead of stealing single planes. Those ranges have to be sized by *work* rather than by plane count. A plane's cost
+is proportional to its valid width $$W - 6 - d$$, which shrinks as $$d$$ grows. Equal
+plane counts would leave the low-$$d$$ worker holding the most.
 
 **It costs 1.30× on the CPU.** The three-wide window and the coarser work quantum both
 land on the cost stage. The first version cost 1.53×, and I fixed the wrong half
@@ -361,12 +371,16 @@ published SGM output, which ships with the dataset and has a known row on the pu
 table. An evaluator that cannot reproduce a known result is not evidence about
 anything. Mine now reproduces it to 37.33 against 37.3 and refuses to run if it stops.
 
-The metric definitions are transcribed from the benchmark's own `evaldisp.cpp` rather
-than reimplemented, including two details that change the answer: the maximum disparity
-for clipping comes from the *result's* calibration while the integer-rounding flag
-comes from the *ground truth's*, and `bad` counts wrong pixels over all masked pixels
-*including* the ones the matcher left empty. That last one means `bad` is not an error
-rate over answered pixels until you divide by coverage.
+The metric definitions are transcribed from the benchmark's own `evaldisp.cpp`
+rather than reimplemented. Three details change the answer:
+
+- the maximum disparity for clipping comes from the *result's* calibration;
+- the integer-rounding flag comes from the *ground truth's*;
+- `bad` counts wrong pixels over all masked pixels, *including* the ones the matcher
+  left empty.
+
+That last one means `bad` is not an error rate over answered pixels until you divide
+by coverage.
 
 ## 4. What the matcher produces
 
@@ -416,16 +430,15 @@ One property of the margin bounds how far it can be trusted, and it is not visib
 a benchmark. **Best-minus-second is only defined over the candidates actually
 searched.** Where the true disparity is outside the search range, or its match lies off
 the edge of the other image, the best candidate has no real competitor and the margin
-is therefore *large*. On the camera this is not hypothetical: raising the gate to 0.05
-on a scene whose near floor sat outside the search range removed a fifth of the wrong
-points and four fifths of the right ones. A confidence that reads only the cost curve
+is therefore *large*. On the camera this is not hypothetical. One scene had its near floor outside the
+search range. Raising the gate to 0.05 there removed a fifth of the wrong points and
+four fifths of the right ones. A confidence that reads only the cost curve
 cannot see the case where the answer was never on the curve.
 
-98% of the coverage cost is the gate, which is a chosen position on the curve. I built the fix for the
-other 0.2 — when a pixel's best candidate points at a right pixel some other pixel
-already claimed, retry its second candidate instead of dropping the pixel — and
-measured coverage 80.1% → 80.3% for error 26.0% → 26.3%. It pays for what it recovers.
-Reverted.
+98% of the coverage cost is the gate, which is a chosen position on the curve. I built the fix for the other 0.2. When a pixel's best candidate points at a right
+pixel some other pixel has already claimed, retry its second candidate rather than
+dropping the pixel. Measured, that moves coverage 80.1% → 80.3% for error
+26.0% → 26.3%. It pays for what it recovers. Reverted.
 
 ## 6. Where a pixel is actually lost
 
@@ -457,9 +470,9 @@ Reading the bill:
   shows that neither winner-take-all nor message passing gets it.
 - **8.5% is the fit**, on pixels whose integer was already right.
 
-One methodological note, because it changed the answer. Run on Teddy alone, this
-table says the fit is dominant and the descriptor is nearly free — Teddy's cost is
-much better than average, 92.8% top-1 in the far field against 67.9% pooled. The
+One methodological note, because it changed the answer. Run on Teddy alone, this table says the fit is dominant and the descriptor is
+nearly free. Teddy's cost is much better than average: 92.8% top-1 in the far field,
+against 67.9% pooled. The
 fifteen-scene number *inverts* the ordering. One scene is not a benchmark, and this
 is the cleanest demonstration of that in the project.
 
@@ -516,9 +529,9 @@ unclaimed:
 
 Below zero they are not merely flat — a factor of four in magnitude produces a
 **byte-identical** disparity map. They sit far below the score distribution, so the rejection they implement
-almost never fires. Above zero they work — and what they do is trade coverage for
-precision at roughly the same exchange rate as the margin gate, which is to say they
-are a second gate rather than a second mechanism.
+almost never fires. Above zero they work. What they do is trade coverage for precision, at roughly the
+same exchange rate as the margin gate — which makes them a second gate rather than a
+second mechanism.
 
 **Descriptor size trades, it does not improve.** The obvious response to a 10.8%
 descriptor bill is a bigger descriptor — the Census window is a template and 9×7 is 62
@@ -567,32 +580,35 @@ exchange rate as the gate and $$\lambda/\gamma$$. It is a third knob along the s
 curve. And it is not free: on the TX2 the solve is 13.0 ms without it against 25.5 ms
 with it, so roughly twelve milliseconds of CPU at the camera's resolution.
 
-Getting this measurement right required fixing the ablation first. With no messages the
-max-sum belief $$\beta + \rho - s$$ degenerates to *minus* the score, so the solver
-picked the **worst** candidate and the configuration read 67.3% — which looks exactly
-like proof that message passing is worth forty points. It is not an ablation, it is an
+Getting this measurement right required fixing the ablation first. With no messages the max-sum belief $$\beta + \rho - s$$ degenerates to *minus* the
+score, so the solver picked the **worst** candidate. The configuration read 67.3%,
+which looks exactly like proof that message passing is worth forty points. It is not an ablation, it is an
 inverted objective, and it would have been an easy number to publish.
 
-What this does *not* say is that MASDA is doing nothing. The parts that survive the
-ablation are the parts that distinguish this from a block matcher: the one-to-one
-constraint, which SGM does not have at all and needs a [left-right consistency
-check][gl-lrc] added afterwards to approximate, and the margin, which is what a downstream
-consumer gates on. Both are present in every row of that table. What is in question is
-the loopy belief propagation on top of a *two-candidate* set, which is the case where
-it has the least to decide. The sparse matcher's advantage in Part 1 was measured with
-many candidates on deliberately ambiguous projected-dot texture, and temporal
-association — where the candidate set is genuinely large and two-dimensional — has not
-been tested. Message passing is off by default in the dense path and one flag away.
+What this does *not* say is that MASDA is doing nothing. Two parts survive the ablation, and they are the parts that distinguish this from a
+block matcher:
+
+- the one-to-one constraint, which SGM does not have at all and approximates with a
+  [left-right consistency check][gl-lrc] added afterwards;
+- the margin, which is what a downstream consumer gates on.
+
+Both are present in every row of that table. What is in question is the loopy belief
+propagation on top of a *two-candidate* set, which is the case where it has least to
+decide.
+
+Part 1 measured the sparse matcher's advantage with many candidates, on deliberately
+ambiguous projected-dot texture. Temporal association, where the candidate set is
+genuinely large and two-dimensional, has not been tested. Message passing is off by default in the dense path and one flag away.
 
 The camera adds a detail the benchmark cannot show. Take a live scene where part of the floor
 falls outside the search range, so those pixels have no correct answer available at
-all. Raising the iteration count moves coverage from 88.3% to 90.0%. It also moves the
-number of points sitting on a demonstrably false surface from 242 to 473, and the extra
-ones are concentrated in the strip where the correct match lies off the edge of the
-right image. The extra coverage is partly
-coverage of pixels that cannot be answered: message passing propagates support along
-the row, and where no correct answer exists it propagates the wrong one and raises its
-confidence. **A one-to-one constraint does not reject an occluded pixel when the true
+all. Raising the iteration count moves coverage from 88.3% to 90.0%. It also moves the number of points sitting on a demonstrably false surface from 242
+to 473. The extra ones are concentrated in the strip where the correct match lies off
+the edge of the right image.
+
+So the extra coverage is partly coverage of pixels that cannot be answered. Message
+passing propagates support along the row. Where no correct answer exists, it
+propagates the wrong one and raises its confidence. **A one-to-one constraint does not reject an occluded pixel when the true
 partner is outside the image**, because there is no competitor for it to lose to.
 
 ## 9. What did not work, and why
@@ -621,66 +637,78 @@ would compute 19.2% of the sweep. Three things consume that saving:
 paper exactly and still do not help. The construction admits 13.9% of the disparity
 range per pixel — an 86% reduction, right at the published claim. But the admitted
 disparities of *neighbouring pixels do not agree*: the union over even a 4×4 tile is
-43.6% of the range. A reduction that is per-pixel and spatially incoherent is unusable
-by a matcher that aggregates over planes, and usable by one that scores candidates
-individually — which is what that paper's own SGM does.
+43.6% of the range. A reduction that is per-pixel and spatially incoherent is unusable by a matcher
+that aggregates over planes. It is usable by one that scores candidates
+individually, which is what that paper's own SGM does.
 
 **Better edge-aware support — the target is real, the mechanism is not.** Pixels within
 8 px of a depth discontinuity are 18.3% of the image and carry 28.6% of all error, at
-57.1% against a 32.0% far-field rate. That is a 4.6-point target. But two independent
-knobs that should move it do not: a fourfold range of the filter's edge sensitivity
-leaves near-edge error at 57.1–57.8%, and handing the solver the *entire* disparity
-range instead of two candidates leaves it at 56.4%. What remains is half-occlusion —
-beside a foreground edge, part of the support has no correspondence in the other image
-at all, and no weighting scheme fixes neighbours that are not visible. The aggregation
-here is already edge-aware; making it more or less so does not touch the pixels it was
-supposed to help.
+57.1% against a 32.0% far-field rate. That is a 4.6-point target. But two independent knobs that should move it do not:
+
+- a fourfold range of the filter's edge sensitivity leaves near-edge error at
+  57.1–57.8%;
+- handing the solver the *entire* disparity range, instead of two candidates, leaves
+  it at 56.4%.
+
+What remains is half-occlusion. Beside a foreground edge, part of the support has no
+correspondence in the other image at all, and no weighting scheme fixes neighbours
+that are not visible. The aggregation here is already edge-aware, and making it more
+or less so does not touch the pixels it was supposed to help.
 
 **A second search band around the coarse level's runner-up.** MASDA exports its
 second-best candidate, and at thin structures the runner-up is often the surface the
-best candidate missed. Measured: worse everywhere. Where the coarse level is ambiguous
-its runner-up is the wrong period of a repetitive texture, and a band around it hands
-the fine solver a wrong surface it can aggregate into a confident answer.
+best candidate missed. Measured: worse everywhere. Where the coarse level is ambiguous, its runner-up is the wrong period of a
+repetitive texture. A band around that hands the fine solver a wrong surface, which
+it then aggregates into a confident answer.
 
 **A strict per-pixel band-membership test at insert time** — the principled version of
 a masked search. Measured a full point worse. The row-interval slack admits candidates
 a pixel's own band would exclude, and they help.
 
-The last two point the same way as Part 1's central result: exact per-row assignment is
-no more precise than MASDA on identical candidates, so the inference is not what bounds
-the outcome. **The candidate set is.** What you offer the solver matters more than how
+The last two point the same way as Part 1's central result. Exact per-row
+assignment is no more precise than MASDA on identical candidates. The inference is
+therefore not what bounds the outcome. **The candidate set is.** What you offer the solver matters more than how
 cleverly you restrict it, and both of these experiments restricted it cleverly.
 
 ## 10. Where this leaves the CPU implementation
 
 At the camera's 848×480 the CPU matcher is a 5 Hz matcher, and the solve — the part
-that is MASDA — is memory-bound rather than arithmetic-bound. Two structural properties
-say where it goes next, and neither is a CPU optimisation. Disparity planes are
-independent, rows are independent, and the solver is two [strided
-reductions][gl-segred]. That is a description of a CUDA kernel, and the TX2's GPU sits
+that is MASDA — is memory-bound rather than arithmetic-bound. Two structural properties say where it goes next, and neither is a CPU
+optimisation. Disparity planes are independent, rows are independent, and the solver
+is two [strided reductions][gl-segred].
+
+That is a description of a CUDA kernel, and the TX2's GPU sits
 at load zero through everything above.
 
-[Part 3][p3] is that port: the image plane moves to the GPU, the CPU keeps the graph,
-and the matcher runs at **31.7 ms per frame at 848×480**, bit-identical to this
-implementation on all eight ground-truth scenes.
+[Part 3][p3] is that port. The image plane moves to the GPU and the CPU keeps the
+graph. The matcher then runs at **31.7 ms per frame at 848×480**, bit-identical to
+this implementation on all eight ground-truth scenes.
 
 The methodological part is worth keeping even if the matcher were thrown away. Three
 rules, each paid for:
 
-1. **The desktop is not a proxy for the target, in either direction.** int16 arithmetic
-   was neutral on the desktop and worth 20% on the Jetson; a 24-bit descriptor was
-   worthless on the desktop and worth 10% on the Jetson; a coarse-to-fine mask was
-   worth 1.24× on the desktop and flat on the Jetson.
+1. **The desktop is not a proxy for the target, in either direction.**
+
+   | change | on the desktop | on the Jetson |
+   |---|---|---|
+   | int16 arithmetic | neutral | worth 20% |
+   | a 24-bit descriptor | worthless | worth 10% |
+   | a coarse-to-fine mask | worth 1.24× | flat |
 2. **The benchmark decides what you can see.** Sub-pixel disparity was a recorded
    negative for months because the benchmark in use could not resolve it.
-3. **Check that a default change is live before measuring it — twice over.** A header
-   was listed as a prerequisite in one build rule and not the other, so a header-only
-   change relinked nothing, `make` printed success, and a fifteen-scene benchmark
-   measured the old value and reported it as the new one. Then both benchmark harnesses
-   turned out to pass `--iters` with values of their own, silently overriding the
-   binary's default — so "the default configuration" had for weeks meant *the
-   harness's* opinion, and a default change read as no change whatsoever. Both were
-   caught by a number coming back **exactly** equal to a figure that should have moved.
+3. **Check that a default change is live before measuring it — twice over.**
+
+   A header was listed as a prerequisite in one build rule and not the other. A
+   header-only change therefore relinked nothing, `make` printed success, and a
+   fifteen-scene benchmark measured the old value and reported it as the new one.
+
+   Then both benchmark harnesses turned out to pass `--iters` with values of their
+   own, silently overriding the binary's default. "The default configuration" had
+   for weeks meant *the harness's* opinion, so a default change read as no change
+   whatsoever.
+
+   Both were caught by a number coming back **exactly** equal to a figure that
+   should have moved.
    An unchanged measurement is a weaker signal than an error, and a slightly different
    one would have been believed.
 
