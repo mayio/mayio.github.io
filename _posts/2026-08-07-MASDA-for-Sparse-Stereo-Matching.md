@@ -333,7 +333,7 @@ Two questions were tangled together:
 | question | answered by |
 |---|---|
 | which candidate? | the belief $$b_{ij}$$, as an ordering. Its sign means nothing. |
-| associate at all? | $$s(i,j)$$ against $$\lambda$$, which is what $$\lambda$$ exists for. |
+| associate at all? | $$s(i,j)$$ against $$\lambda$$, which $$\lambda$$ exists for. |
 
 So: [order by belief, decide by $$\lambda$$](/masda-glossary/#greedy-decode), require row and column
 to agree, then fill

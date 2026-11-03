@@ -159,9 +159,8 @@ This part reuses those equations unchanged and substitutes stereo's nouns
 Sum-Product Algorithm Data Association: the same factor graph solved with
 sum-product, returning marginal association *probabilities* instead of one
 assignment. The right choice when a downstream consumer wants soft weights, and
-more expensive. Williams and Lau are the reference treatment. The comparison with MASDA is [in the
-original
-post](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/#spada-sum-product-algorithm-data-association-and-masda-max-sum-algorithm-data-association).
+more expensive. Williams and Lau are the reference treatment. The original post sets
+[SPADA against MASDA directly](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/#spada-sum-product-algorithm-data-association-and-masda-max-sum-algorithm-data-association).
 
 > J. Williams, R. Lau (2014). *Approximate evaluation of marginal association
 > probabilities with belief propagation.* IEEE Transactions on Aerospace and
