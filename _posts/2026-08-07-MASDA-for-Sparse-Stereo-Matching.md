@@ -631,12 +631,23 @@ pressure on edge $$e$$, summed over the edges that conflict with it:
 $$o_e \;=\; -\sum_{f \in X(e)} \operatorname{clamp}\!\left(b_f,\, 0,\, \kappa\right)$$
 
 Here $$X(e)$$ is the set of edges that cross $$e$$, $$b_f$$ is edge $$f$$'s belief,
-and $$\kappa$$ caps how hard a single conflict can push. The updates are then the
-same two segment reductions of
-[section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation),
-with $$s + o$$ substituted for $$s$$. No new message type, no change to the
-solver's structure. This is the property that makes MASDA worth preferring over
-an exact assignment solver, which cannot follow here at all.
+and $$\kappa$$ caps how hard a single conflict can push.
+
+The two updates of [section 1.2](#12-messages) are then unchanged apart from the
+score they read:
+
+$$
+\begin{aligned}
+\rho_{ij}  &= \big(s_{ij} + o_{ij}\big) - \max\!\left(\lambda,\; \max_{k \neq j} \beta_{ik}\right) \\
+\beta_{ij} &= \big(s_{ij} + o_{ij}\big) - \max\!\left(\gamma,\; \max_{k \neq i} \rho_{kj}\right)
+\end{aligned}
+$$
+
+That is the same pair of calls to `_seg_max_excluding` an iteration already makes in
+[section 3.2](#32-the-sparse-matrix-form--this-is-the-design-not-an-optimisation).
+No new message type, and no change to the solver's structure. This is the property
+that makes MASDA worth preferring over an exact assignment solver, which cannot
+follow here at all.
 
 **It does not make the problem smaller, and the reason is worth stating** because
 the opposite is the natural guess. Ordering constrains *pairs* of associations, not
