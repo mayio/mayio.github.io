@@ -488,9 +488,13 @@ scenes, [Part 2][p2] measures it at **24.5%
 benchmark's own [SGM](/masda-glossary/#semi-global-matching) reference reads 29.1%
 and 90.2% on the same scenes.
 
-Read that as three statements: a lower error rate over the pixels it answers, ten
-points fewer of them, and a curve that runs below SGM's where the two overlap. On these eight 2003/2005 scenes at native
-resolution it measures 9.8% against OpenCV SGM's 10.9%. Both are real; the harder
+Read that as three statements. Over the pixels it answers, this matcher's error rate
+is the lower one. It answers ten points fewer of them. And at matched coverage SGM is
+ahead: on [Part 2's precision–coverage curve][p2-curve] SGM sits below this matcher
+across the range where the two overlap, and a lower curve is a better one.
+
+On the eight 2003/2005 scenes at native resolution it measures 9.8% against OpenCV
+SGM's 10.9%. Both are real; the harder
 benchmark and the looser one disagree about the ordering, and Part 2 shows why.
 
 ![dense maps](/assets/img/2026-08-08-Dense-MASDA_files/maps_a.png)
@@ -902,4 +906,5 @@ Every term this article uses is defined in the
 Census, cost aggregation, SGM, the Jetson's memory system. Each entry links to the
 original work behind it. Terms link there on first use, in all three parts.
 
+[p2-curve]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#5-the-precisioncoverage-curve-and-reading-it-against-sgm
 [p2]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/

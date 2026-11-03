@@ -50,8 +50,10 @@ scenes under the benchmark's own scoring rules:
 | Middlebury's [SGM][gl-sgm] reference | 29.1% | 90.2% |
 
 Ahead on the error rate over answered pixels, ten points behind on how many pixels
-it answers. [The whole curve](#5-the-precisioncoverage-curve-and-reading-it-against-sgm) is below, which is the only fair way to read a
-matcher that declines to answer.
+it answers. Neither number settles it on its own, and
+[the whole curve](#5-the-precisioncoverage-curve-and-reading-it-against-sgm) is the
+only fair way to read a matcher that declines to answer. Read that way, SGM is
+ahead.
 
 ---
 

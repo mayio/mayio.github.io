@@ -502,7 +502,8 @@ a 2-D energy at 1-D cost. It has **no uniqueness constraint** — a
 [left-right consistency check](#left-right-consistency-check) is added afterwards,
 which costs a second matcher run — and no native confidence. It is the direct competitor here. Part 2 measures it at 29.1% bad-1.0 on Middlebury
 v3 against dense MASDA's 24.5%, and at 10.9% against 9.8% on the older eight-scene
-benchmark. SGM answers ten points more pixels in both.
+benchmark. SGM answers ten points more pixels in both, and at matched coverage
+Part 2's curve puts SGM ahead.
 The two mechanisms are orthogonal, and a factor graph carrying both uniqueness and
 path smoothness is the interesting object neither tool implements today.
 
