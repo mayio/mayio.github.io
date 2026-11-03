@@ -103,7 +103,7 @@ Per frame, in stream order, with measured kernel minima at 848×480, $$D=64$$:
 The two fusions are where most of the speed lives, and they follow one principle:
 
 > **A pass that stores exactly what the next pass reads is a fusion candidate. A store
-> that nothing reads afterwards is a bug you are paying for.**
+> that nothing reads afterwards is a bug costing you time.**
 
 The first port scored the volume (52 MB written), read it back to filter (52 in, 52
 out), wrote it filtered, then read it again for the top-2. The shipping version computes the score
@@ -144,7 +144,7 @@ The Denvers are left to the CUDA driver and the fetcher. (The same change measur
 worse* on the CPU-only matcher, which needs the Denvers for throughput. An optimisation
 is a measurement attached to a machine.)
 
-**Keypoint detection is a third thread, and it is free.** The system needs a sparse
+**Keypoint detection is a third thread, and it costs nothing.** The system needs a sparse
 feature set as well as a dense map — for tracking and odometry — and detection is 29 ms
 of one core. Run inside the pipelined loop beside the decode, it costs **0.4–1.4 ms of frame
 time**, because it hides under the 26.9 ms of kernels. 97.3% of detected keypoints
@@ -310,15 +310,15 @@ Measured steady state, pipelined over 30 frames, best of three at locked clocks:
 **Disparity range costs in steps of 64**, because the $$k$$-runs pad to a multiple of
 64. The step is the whole story: $$D=32$$ measures 25.5 ms in the cost stage and
 $$D=64$$ measures 25.6, while $$D=65$$ measures 41.8 and $$D=128$$ measures 42.4. So
-$$D=128$$ is free if you are already paying for $$D=96$$, and **asking for fewer than
-64 disparities saves nothing at all** — it buys the same block and discards part of
-it. $$D=64$$ is therefore the only sensible setting below the cliff, and it is where the
+$$D=128$$ costs nothing if you are already computing $$D=96$$, and **asking for fewer than
+64 disparities saves nothing at all** — it computes the same block and discards part of
+it. $$D=64$$ is therefore the only sensible setting below the step, and it is where the
 matcher runs. 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget. No
 other configuration does. On a vehicle the board will get hot and slow itself down,
 which reduces that margin. When it does, the pipeline drops to 15 Hz instead of failing.
 
 That step has a consequence outside the timing table. The live pipeline had its minimum range set to 0.4 m, which is $$D=53$$. That sits
-inside the same block of 64, so the missing eleven disparities were already bought
+inside the same block of 64, so the missing eleven disparities were already computed
 and thrown away. Everything nearer than 0.4 m came back as a confident wrong answer
 rather than as a gap.
 
@@ -356,9 +356,9 @@ scenes need $$D=80$$. Their upper disparities were never scored, and the top-2 r
 into the *neighbouring pixel's* run. The two scenes that passed — Teddy and Cones — are exactly the two everything gets
 tuned on, at $$D=60$$.
 
-**Mapping the GPU's wins back to the CPU: mostly no.** Fusing the top-2 insert into the
-filter's last pass is the GPU's single biggest win. On the CPU it changes nothing — the plane
-sits in L2 between passes, so the store the fusion deletes was nearly free and the
+**Mapping the GPU's speed-ups back to the CPU: mostly no.** Fusing the top-2 insert into the
+filter's last pass is the GPU's single biggest speed-up. On the CPU it changes nothing — the plane
+sits in L2 between passes, so the store the fusion deletes cost almost nothing and the
 re-read was nearly a cache hit. A first version was 18% *worse*, because putting a
 branchy insert inside the recurrence loop killed the compiler's autovectorisation.
 
@@ -371,7 +371,7 @@ int32-carry/int16-store pattern, the ascending-$$k$$ strictly-greater top-2 — 
 replicated.
 
 This costs something. The Nehab-style filter was off the table, and so is any
-reassociation. It has paid for itself three times. The tie bug and the padding bug are both
+reassociation. It has justified that cost three times. The tie bug and the padding bug are both
 *invisible* to an accuracy benchmark at the scale they occur, and a race in the
 pipelined mode would be invisible too. The pipelined path writes the **last** frame's output, so
 a broken overlap breaks the identity check instead of passing quietly.
@@ -379,7 +379,7 @@ a broken overlap breaks the identity check instead of passing quietly.
 It also means the accuracy story needs no new evidence. The GPU produces the same bytes, so Part 2's measurements are the GPU's
 measurements. That includes the ones that went against expectation: the
 [sub-pixel fit][gl-subpix] being worth fifteen points, and the message passing not
-paying for itself in the dense path.
+being worth its cost in the dense path.
 
 ## 7.1 The whole frame in one table
 
@@ -447,7 +447,7 @@ What is genuinely unfinished:
   window has no counterpart in the other image at all. That is a different problem from
   the one the aggregation solves.
 - **The temporal direction, which is where MASDA's own claim is still open.** [Part 2's
-  ablation][p2-ablation] says the message passing does not pay for itself when it decides between two
+  ablation][p2-ablation] says the message passing is not worth its cost when it decides between two
   candidates on a rectified row. Frame-to-frame association is the opposite situation:
   the candidate set is large, two-dimensional, and genuinely ambiguous, and there is no
   dense map of the *motion* to read instead. That is the experiment the series has been
@@ -471,7 +471,7 @@ Full citations with DOIs, and every term this post uses, are in the
 [p2-curve]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#5-the-precisioncoverage-curve-and-reading-it-against-sgm
 [p2-params]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#7-what-the-parameters-are-worth
 [p2-notwork]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#9-what-did-not-work-and-why
-[p2-ablation]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#8-the-ablation-message-passing-does-not-pay-in-the-dense-path
+[p2-ablation]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#8-the-ablation-message-passing-is-not-worth-its-12-ms-in-the-dense-path
 [p2]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
 [gl-appendix]: https://www.mariolueder.com/masda-glossary/
 [gl-masda]: https://www.mariolueder.com/masda-glossary/#masda

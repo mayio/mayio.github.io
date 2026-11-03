@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 'Dense Stereo Matching with Max-Sum Belief Propagation on Sparse Matrices (MASDA)'
-subtitle: 'The one-to-one constraint applied to every pixel: what uniqueness buys over winner-take-all, how much of that the message passing is actually responsible for, how close loopy max-sum gets to the exact assignment optimum, and why the sparse-matrix representation decides everything.'
+subtitle: 'The one-to-one constraint applied to every pixel: what uniqueness gains over winner-take-all, how much of that the message passing is actually responsible for, how close loopy max-sum gets to the exact assignment optimum, and why the sparse-matrix representation decides everything.'
 thumbnail-img: /assets/img/2026-08-08-Dense-MASDA_files/thumb_p1.png
 date: '2026-08-07 19:00:00 +0200'
 categories: association
@@ -44,7 +44,7 @@ scenes with [structured-light ground truth](/masda-glossary/#structured-light-gr
   [winner-take-all](/masda-glossary/#winner-take-all) on identical scores**: 0.890 against 0.775,
   while keeping 95% of WTA's correct answers. Per scene the gain is 8–13 points,
   largest where the texture is worst.
-- **The constraint is what pays, not the message passing.** Applying the same greedy
+- **The accuracy comes from the constraint, not from the message passing.** Applying the same greedy
   one-to-one claim to each pixel's top-1 score — no messages at all — reaches 0.890.
   Full MASDA reaches 0.883, trading 0.8 points of precision for 6,333 more answers.
   The engineered matcher in Part 2 reproduces this independently, in different code
@@ -272,7 +272,7 @@ def top2_excluding(A, axis):
     return out
 ```
 
-Ties and dead entries are the cases to get right, and this form handles both. The
+Ties and `-inf` entries are the cases to get right, and this form handles both. The
 substitution is by *index*, so two equal maxima do not both get demoted. A line of
 `-inf` returns `-inf`. Checked against a brute-force scan over 6000 random
 matrices with a deliberately small value range, no disagreements.
@@ -419,7 +419,7 @@ The shipping configuration, used for every number in this section:
 | ground truth | unknown pixels excluded |
 
 [Section 4.3](#43-two-iterations-against-thirty) measures what the other 28
-iterations would buy. The answer is nothing.
+iterations would add. The answer is nothing.
 
 Three solvers run on **identical scores**:
 
@@ -448,7 +448,7 @@ The middle row is the one that decides where the credit belongs. It applies the 
 uses — best score first, each right pixel claimable once — to each pixel's *top-1
 score*, with no message passing at all. **The constraint delivers the entire gain.
 The message passing costs 0.8 points of precision and returns 6,333 more correct
-answers**, which is the same trade the margin gate offers for free.
+answers**, which is the same trade the margin gate offers at no cost.
 
 That is not the reading I expected when I built this. [Part 2][p2] reproduces it
 independently, with the engineered C++ matcher — a different codebase, a different
@@ -476,7 +476,7 @@ Per scene, WTA against MASDA:
 
 The gain is largest on the worst scenes (Art, Laundry, Reindeer), which is the
 right shape: where the descriptor evidence is weakest, mutual exclusivity has the
-most to contribute. The constraint pays in proportion to the
+most to contribute. The constraint's gain is proportional to the
 [ambiguity](/masda-glossary/#repetitive-texture-and-ambiguity), and here that is
 measured over 1.3 million answers.
 
@@ -546,7 +546,7 @@ ran thirty, the difference is worth its own table. Pooled over all eight scenes:
 | **2** (shipping) | 242,824 | **0.884** | 0.9918 | 6 / 369 |
 | 30 | 243,589 | 0.880 | 0.9992 | 175 / 369 |
 
-Fifteen times the message passing buys 0.3% more correct answers, 0.4 points
+Fifteen times the message passing gives 0.3% more correct answers, 0.4 points
 *less* precision, and a solve four times slower. The extra iterations move
 marginal candidates from "not answered" to "answered", and those marginal
 candidates are wrong slightly more often than the population average — so the
@@ -569,7 +569,7 @@ page.
 
 The complexity argument is $$O(T \cdot E)$$ against
 [Jonker-Volgenant's](/masda-glossary/#jonker-volgenant-and-the-hungarian-method)
-$$O(N^3)$$. Written the obvious way, the argument buys nothing. Keep the messages in a per-row
+$$O(N^3)$$. Written the obvious way, the argument is worth nothing. Keep the messages in a per-row
 $$W \times W$$ matrix padded with $$-\infty$$, and with two real candidates per
 pixel more than 99% of the arithmetic lands on the $$-\infty$$ cells.
 
@@ -612,8 +612,8 @@ structure, where a [LAP solver](/masda-glossary/#linear-assignment-problem) cann
 
 Scanline stereo methods use the [ordering constraint](/masda-glossary/#ordering-constraint): matches
 along a scanline
-should not cross. This is the one thing scanline dynamic programming gets for
-free and a plain assignment formulation does not, so it is the standing
+should not cross. This is the one thing scanline dynamic programming gets with no
+extra mechanism and a plain assignment formulation does not, so it is the standing
 objection to using MASDA for dense stereo. It can be added as a factor, the
 derivation is tidier than I expected, and on the dense problem it costs more than
 it returns.
@@ -677,7 +677,7 @@ it. Representing it costs about 2400 crossing pairs against 885 edges on a dense
 which is the 3:1 that [the measurement](#61-measured-dense-it-works-and-it-costs-more-than-it-returns)
 turns into 5–7× the solve.
 
-What that buys is a constraint DP cannot have: a soft one. $$\kappa$$ stays finite.
+What that gains is a constraint DP cannot have: a soft one. $$\kappa$$ stays finite.
 Thin foreground objects genuinely violate ordering, and a hard constraint would
 delete them — the standard failure of DP-based scanline
 methods, which is why they need forbidden-move exceptions.
@@ -709,12 +709,12 @@ same shape uniqueness itself shows in [section 4.1](#41-what-uniqueness-is-worth
 And it is **not worth switching on**, for a reason specific to the dense
 formulation: *the band is the whole row.* Every pixel is a node, so a row carries
 about 885 edges and about 2,400 crossing pairs. The pairs outnumber the edges by
-nearly 3:1, and the $$O(E_r^2)$$ enumeration that is free on a handful of nodes
-becomes the largest item on the board.
+nearly 3:1, and the $$O(E_r^2)$$ enumeration that costs nothing on a handful of nodes
+becomes the largest item in the solve.
 
 Enumerating and reducing over 600,000 pairs per scene costs 5–7× the entire solve,
-and buys 0.4 points of precision. Set that against the factor of 62 the
-sparse-matrix representation buys for free. In absolute terms it is 40 more correct
+and gains 0.4 points of precision. Set that against the factor of 62 the
+sparse-matrix representation gives at no cost. In absolute terms it is 40 more correct
 answers out of 243,000.
 
 The $$\kappa$$ sweep says the same thing from another direction: 0.1, 0.3 and 0.8
@@ -729,7 +729,7 @@ rather than an optimisation. Even at that price, a 0.4-point return does not
 obviously justify the loops it adds to a graph whose convergence is already
 unguaranteed. Where I would expect it to matter is
 precisely where the geometry stops helping: an uncalibrated pair, or
-two-dimensional temporal association, where nothing constrains ordering for free.
+two-dimensional temporal association, where nothing implies an ordering.
 
 One structural note worth keeping. Crossings correlate strongly with the error rate rather than with the geometry. The
 two scenes with the most crossings, Art at 31,116 and Laundry at 27,126, are the two
@@ -860,7 +860,7 @@ Neighbouring pixels on the same surface have similar disparity, and the current
 factor graph ignores that entirely.
 [Section 6](#6-can-masda-express-the-ordering-constraint) now measures ordering
 rather than leaving it open, and the question it leaves behind is whether a
-neighbourhood factor pays where ordering did not. The cheap
+neighbourhood factor gains where ordering did not. The cheap
 variants are measured negatives (Part 2's record); the real derivation — path
 aggregation as factors, so uniqueness and smoothness live in one graph — is the
 interesting object this formulation makes possible.
@@ -888,11 +888,11 @@ sparsification curve, which answers the ordering question and stops there.
 **Temporal factors.** The same machinery for frame-to-frame association, where
 the previous frame's solution is a prior. A first prototype (frame $$t$$'s
 disparities masking frame $$t{+}1$$'s candidates) already measures positive on
-the engineered pipeline, and unlike a coarse pass, the prior is free.
+the engineered pipeline, and unlike a coarse pass, the prior costs nothing.
 
 A caveat on all of the above: eight scenes at 450×375 is not a benchmark, and the
 specific figures are what this code did on these scenes. What I would expect to
-generalise is the shape of the result. Uniqueness pays in proportion to how
+generalise is the shape of the result. Uniqueness gains in proportion to how
 ambiguous the scene is. Loopy max-sum matches exact inference on precision, even
 though the conditions of its guarantee are violated. And the representation — not
 the mathematics — decides whether any of it is usable.

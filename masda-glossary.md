@@ -159,7 +159,7 @@ This part reuses those equations unchanged and substitutes stereo's nouns
 Sum-Product Algorithm Data Association: the same factor graph solved with
 sum-product, returning marginal association *probabilities* instead of one
 assignment. The right choice when a downstream consumer wants soft weights, and
-more expensive. Williams and Lau are the reference treatment. The original post sets
+slower. Williams and Lau are the reference treatment. The original post sets
 [SPADA against MASDA directly](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/#spada-sum-product-algorithm-data-association-and-masda-max-sum-algorithm-data-association).
 
 > J. Williams, R. Lau (2014). *Approximate evaluation of marginal association
@@ -236,7 +236,7 @@ the theory.
 The total score of MASDA's assignment divided by the exact optimum's, per row —
 1.0 meaning "MASDA found an optimal assignment". Reported alongside precision in
 [section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum), because the two disagree
-instructively. Closing an 0.8% objective gap buys no precision at all. That makes
+instructively. Closing an 0.8% objective gap gains no precision at all. That makes
 the objective a demonstrably loose proxy for the quantity a consumer experiences.
 
 ### Greedy decode
@@ -278,7 +278,7 @@ gives the ten lines.
 ### Ordering constraint
 
 Along a rectified scanline, correspondences of an opaque surface preserve left-right
-order: matches should not cross. Scanline dynamic programming gets this for free, which is the classical argument
+order: matches should not cross. Scanline dynamic programming gets this with no extra mechanism, which is the classical argument
 for DP-based stereo, going back to Ohta and Kanade. A plain assignment formulation
 does not. That is the standing objection to using MASDA here.
 
@@ -354,7 +354,7 @@ camera, up to 80 on the benchmark scenes. A *disparity plane* is the whole image
 scored at one fixed $$d$$.
 
 64 is not a tuning choice. The GPU pads a pixel's disparity run to a multiple of
-64, so every $$D$$ from 1 to 64 costs the same, and asking for fewer buys
+64, so every $$D$$ from 1 to 64 costs the same, and asking for fewer saves
 nothing.
 
 ### Occlusion
@@ -411,7 +411,7 @@ The distance between two Census descriptors is the number of differing bits: XOR
 them and count the ones. `popcount` is that count in hardware —
 `__builtin_popcountll` becomes one instruction on x86-64 and a short sequence
 around NEON's `cnt` on ARMv8 — which is what makes a 48-bit descriptor comparison
-essentially free. Two unrelated descriptors agree on half
+essentially costless. Two unrelated descriptors agree on half
 their bits by chance, which is the zero point the score scale of
 [section 1.3](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#13-the-score) is built around.
 
@@ -438,10 +438,10 @@ The sum runs over **positions**, at a fixed disparity $$d$$. It never averages a
 disparities, which is why the implementation needs a whole constant-disparity plane in
 memory, and why two of Part 2's negative results follow from that one constraint.
 
-It is the third stage of the classical taxonomy, and on this project the single
-largest accuracy lever. One 7×7 Census comparison quantises to 49 levels, and Part 2
+It is the third stage of the classical taxonomy, and on this project the stage
+with the largest effect on accuracy. One 7×7 Census comparison quantises to 49 levels, and Part 2
 measured unaggregated scores at 28.1% bad against 12.7% for SGM stripped of its
-smoothness term entirely. In factor-graph language, better unaries beat a cheap pairwise term —
+smoothness term entirely. In factor-graph language, better unaries beat a computationally cheap pairwise term —
 which is also why the cheap smoothness factor is a recorded negative result.
 
 ### Edge-aware recursive filter
@@ -477,7 +477,7 @@ because Part 3 reproduces them bit-for-bit on the GPU.
 A pairwise term that penalises disparity differences between neighbouring pixels,
 on the argument that surfaces are mostly continuous. It is the mechanism
 [SGM](#semi-global-matching) is built on, and the one this factor graph does *not*
-have. Two cheap versions were tried here and are recorded as negatives, worse at every
+have. Two computationally cheap versions were tried here and are recorded as negatives, worse at every
 weight. The mechanism is the reason: on a quantised Census volume, the information
 a neighbour smoothness term would add is better added by
 [aggregating the unaries](#cost-aggregation). The interesting unbuilt object is a
@@ -756,7 +756,7 @@ result depends only on lane 3 of the inputs. So the design
 question in any SIMD kernel is *what does a lane mean*: which axis of the problem
 you spread across the register. Put eight **pixels** in the lanes and the
 neighbouring per-pixel table lookups stay scalar gathers, which is the version that
-bought nothing in Part 2. Put eight **disparities** in the lanes and the eight
+gave no speed-up in Part 2. Put eight **disparities** in the lanes and the eight
 Hamming distances for one pixel land in one register, both lookups become vector
 operations, and the loop vectorises properly. Same arithmetic, same register width,
 different meaning assigned to the lanes.
@@ -792,7 +792,7 @@ is the introduction.
 ### Q14 fixed point
 
 Integer arithmetic standing in for fractions: an `int16` holding a value scaled by
-$$2^{14}$$, so $$[-2, 2)$$ is representable to about $$6 \times 10^{-5}$$. The score is naturally in $$[-1, 1]$$, so it fits with headroom to spare, and the
+$$2^{14}$$, so $$[-2, 2)$$ is representable to about $$6 \times 10^{-5}$$. The score is naturally in $$[-1, 1]$$, so it fits with room to spare, and the
 whole pipeline stays integer. That is what makes bit-identity between CPU and GPU
 achievable at all, because integer arithmetic has no reassociation freedom.
 
@@ -831,8 +831,8 @@ memory-coherency model this violates.
 ### Kernel fusion
 
 Merging two passes so the intermediate never reaches memory. Part 3 states the principle as: *a pass that stores exactly what the next pass
-reads is a fusion candidate, and a store nothing reads afterwards is a bug you are
-paying for.*
+reads is a fusion candidate, and a store nothing reads afterwards is a bug costing
+you time.*
 
 It found time three times on the GPU, and *nothing* on the CPU, where the
 intermediate plane was already resident in L2. Same transformation, opposite
@@ -874,7 +874,7 @@ only if the hot loop stays branch-free.
 
 Requiring two implementations to produce byte-identical output, checked with `cmp`.
 Part 3 treats it as a design constraint rather than a test, so every GPU
-intermediate replicates the CPU's exact integer arithmetic. It paid twice. A
+intermediate replicates the CPU's exact integer arithmetic. It caught two bugs. A
 ten-pixel tie-break error in 407,040, and a padding bug that silently broke six of
 eight scenes, are both invisible to an accuracy benchmark at the scale they
 occur. The

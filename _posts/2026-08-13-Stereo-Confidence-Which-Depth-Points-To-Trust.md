@@ -25,7 +25,7 @@ in the end one logarithm and one division per pixel.
 
 Three results are worth reading even if you never touch this code. **A confidence
 measure and a probability are different things**, and the difference is not
-presentational. **A textbook trick can be exactly right and buy nothing**, if the
+presentational. **A textbook trick can be exactly right and change nothing**, if the
 pipeline already does it somewhere you did not look. And **the model that fits your
 benchmark best can be the one you must not deploy**, because it fits best precisely
 where your benchmark has no examples.
@@ -97,7 +97,7 @@ ten.**
 The ratio beats the difference, on the same two numbers, for one divide instead of one
 subtract.
 
-## 3. The textbook trick that bought nothing, and why
+## 3. The textbook trick that changed nothing, and why
 
 The most useful single finding in the modern literature on this comes from Poggi,
 Tosi and Mattoccia's [re-evaluation of 52 confidence measures][poggi]. It is
@@ -122,7 +122,7 @@ published effect should reappear:
 |---|---|---|---|---|
 | peak ratio | 0.0513 | 0.0349 | **0.0294** | 0.0339 |
 | pooled over 5×5 | 0.0418 | 0.0316 | **0.0294** | 0.0340 |
-| what pooling bought | 0.0095 | 0.0033 | **0.0000** | −0.0001 |
+| what pooling added | 0.0095 | 0.0033 | **0.0000** | −0.0001 |
 
 It does. The literature is right and the feature is redundant *here*, which are not the
 same statement. **A measure that is worth a window on a raw cost volume is worth nothing
@@ -327,11 +327,11 @@ thing to measure, and is not measured yet.
 Nothing that shows up in a profile. The two scores were already computed by the
 matcher's own reduction. The reverse match reuses buckets the solver already builds and
 then discards — its message-passing update needs exactly that structure — so it is two
-loops over scratch memory that was already dead. The model is a logarithm, a divide and
+loops over scratch memory that nothing read afterwards. The model is a logarithm, a divide and
 an exponential. Per point, the live pipeline sends one extra byte.
 
 The exact reverse match, over all 64 disparities rather than the two candidates that
-survived, would be worth roughly twice as much again. It is also the one piece here that is genuinely expensive. On a k-minor cost volume
+survived, would be worth roughly twice as much again. It is also the one piece here that is genuinely slow. On a k-minor cost volume
 the reverse reduction runs along a diagonal, which is uncoalesced by construction.
 Doing it on the GPU means about 26 million atomic maximums per frame, on a device
 already spending 26 ms of its 28.9 ms budget on kernels.

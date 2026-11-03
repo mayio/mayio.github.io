@@ -116,7 +116,7 @@ s \;=\; (1 - \alpha)\, s_{\text{census}} \;+\; \alpha\, s_{\text{ad}}, \quad \al
 
 Census carries the structure and is blind to a constant offset; the absolute difference
 notices an offset but is helpless on flat texture. [What the parameters are
-worth](#7-what-the-parameters-are-worth) measures what that blend is actually buying,
+worth](#7-what-the-parameters-are-worth) measures what that blend is actually worth,
 and the answer is not what it was when the term was added.
 
 ### 1.2 What "aggregate" means here
@@ -157,7 +157,7 @@ $$a \;=\; \exp\!\left(-\frac{\sqrt{2}}{\sigma_s}\left(1 + \frac{\sigma_s}{\sigma
 \underbrace{e^{-\sqrt{2}\,|\Delta I| / (255\,\sigma_r)}}_{\text{how easily an edge stops it}}$$
 
 where $$|\Delta I|$$ is the brightness difference between the two pixels, in grey
-levels. The two knobs are separate: $$\sigma_s$$ sets the reach on a flat surface,
+levels. The two parameters are separate: $$\sigma_s$$ sets the reach on a flat surface,
 $$\sigma_r$$ sets how large a brightness step has to be before support stops there.
 
 **How it is computed.** Not with a window. The filter is a first-order recurrence —
@@ -167,7 +167,7 @@ $$F_x \;=\; (1 - a_x)\, C_x \;+\; a_x F_{x-1}$$
 
 This runs four times over the plane: left to right, right to left, top to bottom,
 bottom to top. Each pass costs **one multiply and one add per pixel**, and that cost
-does not depend on $$\sigma_s$$. A wider support is free. This is why the
+does not depend on $$\sigma_s$$. A wider support costs nothing. This is why the
 $$\sigma_s$$ sweep later in this post changes accuracy at no cost in time, and why a
 value that was too large could sit unnoticed.
 
@@ -440,7 +440,7 @@ cannot see the case where the answer was never on the curve.
 98% of the coverage cost is the gate, which is a chosen position on the curve. I built the fix for the other 0.2. When a pixel's best candidate points at a right
 pixel some other pixel has already claimed, retry its second candidate rather than
 dropping the pixel. Measured, that moves coverage 80.1% → 80.3% for error
-26.0% → 26.3%. It pays for what it recovers. Reverted.
+26.0% → 26.3%. The coverage it recovers costs the same in error. Reverted.
 
 ## 6. Where a pixel is actually lost
 
@@ -468,12 +468,12 @@ Reading the bill:
   two candidates.
 - **13.1% is the selector's.** The truth is in the top-2 and the top-1 was taken.
   That is the one component with a clear mandate and no mechanism currently
-  collecting it: [the ablation](#8-the-ablation-message-passing-does-not-pay-in-the-dense-path)
+  collecting it: [the ablation](#8-the-ablation-message-passing-is-not-worth-its-12-ms-in-the-dense-path)
   shows that neither winner-take-all nor message passing gets it.
 - **8.5% is the fit**, on pixels whose integer was already right.
 
-One methodological note, because it changed the answer. Run on Teddy alone, this table says the fit is dominant and the descriptor is
-nearly free. Teddy's cost is much better than average: 92.8% top-1 in the far field,
+One methodological note, because it changed the answer. Run on Teddy alone, this table says the fit is dominant and the descriptor
+costs almost nothing. Teddy's cost is much better than average: 92.8% top-1 in the far field,
 against 67.9% pooled. The
 fifteen-scene number *inverts* the ordering. One scene is not a benchmark. This is the cleanest demonstration of that in the
 project.
@@ -497,7 +497,7 @@ inherited a value:
 values sit 0.7 above the current operating point. They are read for the shape of the
 curve, not for its level.)*
 
-Better on *both* axes at 6–8 than at 12, and free: the filter is an IIR whose cost does
+Better on *both* axes at 6–8 than at 12, and it costs nothing: the filter is an IIR whose cost does
 not depend on $$\sigma$$. Now 8. This is the cheapest 0.9 points in the project and it
 was sitting there because a comment about a neighbouring parameter made the value look
 considered.
@@ -518,7 +518,7 @@ samples cares about very little else. On the older eight-scene benchmark, scored
 native resolution where the fit's quality is invisible, the graded cost still helps —
 9.8% against 10.3%, and better coverage. It stays on, because that is the resolution
 and tolerance the camera actually operates at, and the interaction is recorded rather
-than tuned away. The change that would win on both is to fit on the Census term alone
+than tuned away. The change that would improve both is to fit on the Census term alone
 while still selecting on the graded cost, which costs a second filtered plane.
 
 **$$\lambda$$ and $$\gamma$$ do nothing where they are set.** These are MASDA's clutter
@@ -548,7 +548,7 @@ loops and the CUDA census kernel, the direction was priced on the axis already w
 | centre-symmetric, 24 bit | **24.68** | 75.9% |
 
 Halving the descriptor *lowers* the error rate by 0.5 and costs 3.7 points of
-coverage. That is the same precision–coverage trade every other knob offers — not a
+coverage. That is the same precision–coverage trade every other parameter offers — not a
 better or worse descriptor, a differently-gated one. If 24 fewer bits only slides
 along the curve, 14 more will too, so 9×7 is not worth building.
 
@@ -561,7 +561,7 @@ identical output at 3, 7 and its default, because the recursive filter ignores i
 still exists as a flag because an older box-filter path used it. Stated here so that
 nobody sweeps it and wonders why nothing changes.
 
-## 8. The ablation: message passing does not pay in the dense path
+## 8. The ablation: message passing is not worth its 12 ms in the dense path
 
 The matcher is named after an inference algorithm, so the obvious question is what that
 inference contributes. Disabling the message passing leaves everything else
@@ -577,9 +577,9 @@ uniqueness constraint on top:
 | 2 | 26.04 | 80.1% | 25.58 | 80.6% |
 | 4 | 26.19 | 80.2% | 25.78 | 81.0% |
 
-**The message passing buys coverage and pays for it in precision**, at about the same
-exchange rate as the gate and $$\lambda/\gamma$$. It is a third knob along the same
-curve. And it is not free: on the TX2 the solve is 13.0 ms without it against 25.5 ms
+**The message passing gains coverage and costs precision**, at about the same
+rate as the gate and $$\lambda/\gamma$$. It is a third parameter along the same
+curve. And it costs time: on the TX2 the solve is 13.0 ms without it against 25.5 ms
 with it, so roughly twelve milliseconds of CPU at the camera's resolution.
 
 Getting this measurement right required fixing the ablation first. With no messages the max-sum belief $$\beta + \rho - s$$ degenerates to *minus* the
@@ -645,7 +645,7 @@ individually, which that paper's own SGM does.
 
 **Better edge-aware support — the target is real, the mechanism is not.** Pixels within
 8 px of a depth discontinuity are 18.3% of the image and carry 28.6% of all error, at
-57.1% against a 32.0% far-field rate. That is a 4.6-point target. But two independent knobs that should move it do not:
+57.1% against a 32.0% far-field rate. That is a 4.6-point target. But two independent parameters that should move it do not:
 
 - a fourfold range of the filter's edge sensitivity leaves near-edge error at
   57.1–57.8%;
@@ -687,7 +687,7 @@ graph. The matcher then runs at **31.7 ms per frame at 848×480**, bit-identical
 this implementation on all eight ground-truth scenes.
 
 The methodological part is worth keeping even if the matcher were thrown away. Three
-rules, each paid for:
+rules, each produced by a failure:
 
 1. **The desktop is not a proxy for the target, in either direction.**
 
