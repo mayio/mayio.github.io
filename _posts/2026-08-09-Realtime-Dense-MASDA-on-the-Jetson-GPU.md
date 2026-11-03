@@ -417,11 +417,18 @@ disparities are better than the ones a dedicated sparse matcher produced.
 
 What is genuinely unfinished:
 
-- **Coverage.** 80% of pixels answered at the shipping gate against [SGM's][gl-sgm] 90%,
-  and Part 2's [precision–coverage curve][p2-curve] shows SGM's curve sitting below this one where they
-  overlap — by about two points at matched coverage, down from three before the
-  equiangular estimator. No parameter closes it; the levers that would are structural
-  and were measured and declined.
+- **Coverage, and accuracy at equal coverage.** At the shipping gate this matcher
+  answers 80% of pixels and [SGM][gl-sgm] answers 90%.
+
+  Compare them at the *same* coverage and SGM is ahead there too. Part 2's
+  [precision–coverage curve][p2-curve] plots error rate against coverage, so a lower
+  curve is a better one. SGM sits about two points of error below this matcher, across
+  the range where the two overlap. That gap was three points before the
+  equiangular estimator.
+
+  No parameter setting closes it. A parameter moves the operating point along the
+  curve; closing the gap means moving the curve itself. Part 2 tried four structural
+  changes for that, and [none of them worked][p2-notwork].
 - **The descriptor, which is the largest single item in the error budget.** 10.8% of
   far-field pixels have no candidate within half a pixel anywhere in the top eight, so
   no solver on this cost volume can reach them. [Part 2's parameter table][p2-params] measures that a *bigger* Census
@@ -463,6 +470,7 @@ Full citations with DOIs, and every term this post uses, are in the
 [p1]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/
 [p2-curve]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#5-the-precisioncoverage-curve-and-reading-it-against-sgm
 [p2-params]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#7-what-the-parameters-are-worth
+[p2-notwork]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#9-what-did-not-work-and-why
 [p2-ablation]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#8-the-ablation-message-passing-does-not-pay-in-the-dense-path
 [p2]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
 [gl-appendix]: https://www.mariolueder.com/masda-glossary/
