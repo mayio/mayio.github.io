@@ -109,6 +109,15 @@ Same as the tracking case, on the same
 | $$\Gamma_j$$ | misdetection factor, the price of leaving $$j$$ unclaimed |
 | $$I_i$$, $$E_j$$ | exclusivity constraints, at most one match each way |
 
+![factor graph](/assets/img/2026-08-07-MASDA-Sparse-Stereo_files/factor_graph.png)
+
+*Three left pixels against four right ones. Blue circles are the candidate pairs the
+sparse form builds; dashed circles are the pairs it never does. Each candidate carries
+its own score factor. A row constraint $$I_i$$ joins everything left pixel $$i$$ could
+match, a column constraint $$E_j$$ everything that could claim right pixel $$j$$, and
+$$L_2$$ and $$L_3$$ both want $$R_3$$. The two arrows are the messages of
+[section 1.2](#12-messages), each shown on the edge it travels.*
+
 The graph is loopy. Every $$c_{ij}$$ sits in both an $$I_i$$ and an $$E_j$$ constraint, so
 there are four-cycles everywhere. Hence [loopy belief
 propagation](/masda-glossary/#loopy-belief-propagation), and hence no
