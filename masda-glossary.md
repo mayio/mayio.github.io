@@ -147,7 +147,7 @@ the decisions cannot be made independently per measurement.
 ### MASDA
 
 Max-Sum Algorithm Data Association: max-sum loopy belief propagation on the
-association factor graph, which is what this series is about. The derivation — the
+association factor graph, which this series is about. The derivation — the
 factor graph, the exclusivity constraints, the closed-form messages and the
 complexity argument — is in the [original MASDA
 post](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/).
@@ -281,7 +281,7 @@ gives the ten lines.
 Along a rectified scanline, correspondences of an opaque surface preserve left-right
 order: matches should not cross. Scanline dynamic programming gets this for free, which is the classical argument
 for DP-based stereo, going back to Ohta and Kanade. A plain assignment formulation
-does not, and that is the standing objection to using MASDA here.
+does not. That is the standing objection to using MASDA here.
 
 [Section 6](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#6-can-masda-express-the-ordering-constraint)
 answers it in three steps. It derives the constraint as a pairwise factor costing
@@ -686,7 +686,7 @@ of neighbouring pixels do not agree, and the union over a 4×4 tile is 43.6% of 
 range.
 
 A per-pixel reduction that is spatially incoherent can be spent by a matcher scoring
-candidates individually, which is what that paper's SGM does. It cannot be spent by
+candidates individually, which that paper's SGM does. It cannot be spent by
 one that aggregates costs over whole constant-disparity planes.
 
 > Tomasi, C. & Manduchi, R. (1998). *Stereo Matching as a Nearest-Neighbor Problem.*
@@ -813,7 +813,7 @@ is the reference.
 
 Two of the GPU's addressable memories. `__constant__` is optimised for *broadcast*
 — all lanes reading one address — and serializes into replays when lanes read
-different addresses, which is what 32 different Hamming distances per warp do by
+different addresses, which 32 different Hamming distances per warp do by
 construction. Shared memory is per-block scratch with no such penalty, and moving
 the lookup tables there was worth ~2 ms in Part 3.
 

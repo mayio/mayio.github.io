@@ -23,8 +23,8 @@ disparity candidates out of the aggregated [cost volume](/masda-glossary/#cost-v
 association graph carries two edges per pixel, instead of a $$W \times W$$ matrix
 per row.
 
-Every result below depends on that representation twice over. It is what makes the
-exact comparison feasible, and it is what makes the solver fast.
+Every result below depends on that representation twice over. It makes the exact
+comparison feasible, and it makes the solver fast.
 
 *[Part 2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/)
 takes this formulation into C++ on a Jetson TX2 and measures it against SGM.
@@ -260,7 +260,7 @@ def top2_excluding(A, axis):
 
     The line's largest value is the answer for every entry except the argmax
     itself, which gets the second largest. Two reductions, no per-entry scan --
-    this is what makes an iteration linear in the number of candidates.
+    that makes an iteration linear in the number of candidates.
     """
     i1 = np.expand_dims(np.argmax(A, axis=axis), axis)
     m1 = np.take_along_axis(A, i1, axis)              # the largest
@@ -333,7 +333,7 @@ Two questions were tangled together:
 | question | answered by |
 |---|---|
 | which candidate? | the belief $$b_{ij}$$, as an ordering. Its sign means nothing. |
-| associate at all? | $$s(i,j)$$ against $$\lambda$$, which is what $$\lambda$$ is for. |
+| associate at all? | $$s(i,j)$$ against $$\lambda$$, which is what $$\lambda$$ exists for. |
 
 So: [order by belief, decide by $$\lambda$$](/masda-glossary/#greedy-decode), require row and column
 to agree, then fill
@@ -444,8 +444,7 @@ Pooled over all eight scenes — about 1.3 million answered pixels per method:
 **+11.5 points of precision for the one-to-one constraint, at the cost of 4.5% of
 the correct answers.** WTA answers everywhere and is wrong more than twice as often.
 
-The middle row is the one that decides where the credit belongs, and it is worth
-being precise about. It applies the same greedy one-to-one claim MASDA's decode
+The middle row is the one that decides where the credit belongs. It applies the same greedy one-to-one claim MASDA's decode
 uses — best score first, each right pixel claimable once — to each pixel's *top-1
 score*, with no message passing at all. **The constraint delivers the entire gain.
 The message passing costs 0.8 points of precision and returns 6,333 more correct

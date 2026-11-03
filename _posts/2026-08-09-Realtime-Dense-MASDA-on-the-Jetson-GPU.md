@@ -12,14 +12,12 @@ tags: [belief-propagation, data-association, computer-vision, embedded, cuda]
 ---
 
 This is the real-time implementation: [dense MASDA][p2] running on a
-[Jetson TX2][gl-tx2] at **31.7 ms per frame at 848×480**. That is the camera's full
-resolution, and faster than the camera delivers frames. The disparity map is
+[Jetson TX2][gl-tx2] at **31.7 ms per frame at 848×480**. That is the camera's full resolution, and faster than it delivers frames. The disparity map is
 [bit-identical][gl-bitid] to the CPU matcher on all eight ground-truth scenes.
 
 The design question is not "which parts go on the GPU". It is that the matcher has two
 halves with opposite computational shapes, and the TX2 has two processors with
-opposite strengths. Getting that mapping right is most of the work; the rest is memory
-layout, and the memory layout is where the surprise is.
+opposite strengths. Getting that mapping right is most of the work; the rest is memory layout. That is where the surprise is.
 
 *Every term is defined in the [series glossary][gl-appendix]. [Part 1][p1] derives the
 message equations; [Part 2][p2] is the matcher this post makes real-time.*
@@ -154,7 +152,7 @@ None of this can be said unless detection is measured *inside* the pipelined loo
 Measured outside it, the detection step appeared to cost nothing, and the frame rate
 looked unchanged for the wrong reason.
 
-## 4. The layout that ends the `[d][x]`-versus-`[x][d]` question
+## 4. Why the two machines want opposite layouts
 
 [Part 1][p1] and [Part 2][p2] kept running into the same question: is the cost volume
 [disparity-major or disparity-minor][gl-layout]? The CPU answered three times —
@@ -306,8 +304,8 @@ Measured steady state, pipelined over 30 frames, best of three at locked clocks:
 $$D=64$$ measures 25.6, while $$D=65$$ measures 41.8 and $$D=128$$ measures 42.4. So
 $$D=128$$ is free if you are already paying for $$D=96$$, and **asking for fewer than
 64 disparities saves nothing at all** — it buys the same block and discards part of
-it. $$D=64$$ is therefore the only sensible setting below the cliff, and it is where
-the matcher runs. 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget. No
+it. $$D=64$$ is therefore the only sensible setting below the cliff, and it is where the
+matcher runs. 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget. No
 other configuration does. On a vehicle the board will get hot and slow itself down,
 which reduces that margin. When it does, the pipeline drops to 15 Hz instead of failing.
 
@@ -457,7 +455,7 @@ Full citations with DOIs, and every term this post uses, are in the
 [p1]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/
 [p2-curve]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#5-the-precisioncoverage-curve-and-reading-it-against-sgm
 [p2-params]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#7-what-the-parameters-are-worth
-[p2-ablation]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#8-the-ablation-the-message-passing-is-not-what-makes-this-work
+[p2-ablation]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#8-the-ablation-message-passing-does-not-pay-in-the-dense-path
 [p2]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
 [gl-appendix]: https://www.mariolueder.com/masda-glossary/
 [gl-masda]: https://www.mariolueder.com/masda-glossary/#masda

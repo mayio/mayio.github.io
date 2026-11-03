@@ -239,7 +239,7 @@ Running this on the scored planes reproduces the C++ output to 0.001% of a plane
 range, which is the [int16][gl-q14] rounding. The shipping version differs only in
 arithmetic: $$a$$ is stored as a `uint16` in Q15, and the recurrence multiplies into
 `int32` and stores back to `int16`. Those details are not cosmetic — [Part 3][p3]
-reproduces them bit for bit on the GPU, and that is what makes `cmp` a valid test
+reproduces them bit for bit on the GPU, which is what makes `cmp` a valid test
 there.
 
 ### 1.3 How many candidates the solver needs
@@ -276,8 +276,8 @@ Three structural properties fall out of this design and matter later:
   reduction.
 - **The aggregation needs whole constant-disparity planes.** The recursive filter runs
   across the image at one disparity. This constraint decides the outcome of two
-  separate experiments in [what did not work](#9-what-did-not-work-and-why), and it is
-  the single most consequential property of the design.
+  separate experiments in [what did not work](#9-what-did-not-work-and-why). It is the
+  single most consequential property of the design.
 
 ## 2. Sub-pixel disparity: the largest accuracy result in the project
 
@@ -344,8 +344,8 @@ is proportional to its valid width $$W - 6 - d$$, which shrinks as $$d$$ grows. 
 plane counts would leave the low-$$d$$ worker holding the most.
 
 **It costs 1.30× on the CPU.** The three-wide window and the coarser work quantum both
-land on the cost stage. The first version cost 1.53×, and I fixed the wrong half
-of it first. Double-buffering removed the extra store and barely changed the wall
+land on the cost stage. The first version cost 1.53×, and I fixed the wrong half of it before finding the
+right one. Double-buffering removed the extra store and barely changed the wall
 clock, because the store was never the constraint. The chunked scheduler was. 16-plane chunks
 at $$D=60$$ is four chunks for six threads, so two threads got nothing and occupancy
 fell from 5.3 of 6 cores to 3.7. That is worth more than the arithmetic it saved.
@@ -426,8 +426,8 @@ Where the coverage goes is worth knowing, because it is not lost:
 | the margin gate | 11.1 points |
 | contention in the one-to-one decode | 0.2 points |
 
-One property of the margin bounds how far it can be trusted, and it is not visible on
-a benchmark. **Best-minus-second is only defined over the candidates actually
+One property of the margin bounds how far it can be trusted, and no benchmark shows
+it. **Best-minus-second is only defined over the candidates actually
 searched.** Where the true disparity is outside the search range, or its match lies off
 the edge of the other image, the best candidate has no real competitor and the margin
 is therefore *large*. On the camera this is not hypothetical. One scene had its near floor outside the
@@ -466,15 +466,15 @@ Reading the bill:
   two candidates.
 - **13.1% is the selector's.** The truth is in the top-2 and the top-1 was taken.
   That is the one component with a clear mandate and no mechanism currently
-  collecting it: [the ablation](#8-the-ablation-the-message-passing-is-not-what-makes-this-work)
+  collecting it: [the ablation](#8-the-ablation-message-passing-does-not-pay-in-the-dense-path)
   shows that neither winner-take-all nor message passing gets it.
 - **8.5% is the fit**, on pixels whose integer was already right.
 
 One methodological note, because it changed the answer. Run on Teddy alone, this table says the fit is dominant and the descriptor is
 nearly free. Teddy's cost is much better than average: 92.8% top-1 in the far field,
 against 67.9% pooled. The
-fifteen-scene number *inverts* the ordering. One scene is not a benchmark, and this
-is the cleanest demonstration of that in the project.
+fifteen-scene number *inverts* the ordering. One scene is not a benchmark. This is the cleanest demonstration of that in the
+project.
 
 ## 7. What the parameters are worth
 
@@ -492,7 +492,8 @@ inherited a value:
 | coverage | 79.9% | 79.6% | 79.3% | 78.9% | 77.8% |
 
 *(This sweep and the two below predate the equiangular estimator, so their absolute
-values sit 0.7 above the current operating point. The shapes are what they are for.)*
+values sit 0.7 above the current operating point. They are read for the shape of the
+curve, not for its level.)*
 
 Better on *both* axes at 6–8 than at 12, and free: the filter is an IIR whose cost does
 not depend on $$\sigma$$. Now 8. This is the cheapest 0.9 points in the project and it
@@ -550,16 +551,15 @@ better or worse descriptor, a differently-gated one. If 24 fewer bits only slide
 along the curve, 14 more will too, so 9×7 is not worth building.
 
 Which sharpens what that 10.8% is: **not a bits problem.** More of the same descriptor
-will not collect it. It is a limit of Census-plus-truncated-difference as a similarity
-measure on weakly textured and repetitive surfaces, and changing that means changing
-the similarity function itself.
+will not collect it. It is a limit of Census-plus-truncated-difference as a similarity measure on weakly
+textured and repetitive surfaces. Moving it means replacing that measure.
 
 **And one flag does nothing at all.** `--agg`, the aggregation radius, produces
 identical output at 3, 7 and its default, because the recursive filter ignores it. It
 still exists as a flag because an older box-filter path used it. Stated here so that
 nobody sweeps it and wonders why nothing changes.
 
-## 8. The ablation: the message passing is not what makes this work
+## 8. The ablation: message passing does not pay in the dense path
 
 The matcher is named after an inference algorithm, so the obvious question is what that
 inference contributes. Disabling the message passing leaves everything else
@@ -590,7 +590,7 @@ block matcher:
 
 - the one-to-one constraint, which SGM does not have at all and approximates with a
   [left-right consistency check][gl-lrc] added afterwards;
-- the margin, which is what a downstream consumer gates on.
+- the margin, which a downstream consumer gates on.
 
 Both are present in every row of that table. What is in question is the loopy belief
 propagation on top of a *two-candidate* set, which is the case where it has least to
@@ -639,7 +639,7 @@ range per pixel — an 86% reduction, right at the published claim. But the admi
 disparities of *neighbouring pixels do not agree*: the union over even a 4×4 tile is
 43.6% of the range. A reduction that is per-pixel and spatially incoherent is unusable by a matcher
 that aggregates over planes. It is usable by one that scores candidates
-individually, which is what that paper's own SGM does.
+individually, which that paper's own SGM does.
 
 **Better edge-aware support — the target is real, the mechanism is not.** Pixels within
 8 px of a depth discontinuity are 18.3% of the image and carry 28.6% of all error, at
@@ -667,8 +667,8 @@ a pixel's own band would exclude, and they help.
 
 The last two point the same way as Part 1's central result. Exact per-row
 assignment is no more precise than MASDA on identical candidates. The inference is
-therefore not what bounds the outcome. **The candidate set is.** What you offer the solver matters more than how
-cleverly you restrict it, and both of these experiments restricted it cleverly.
+therefore not what bounds the outcome. **The candidate set is.** What you offer the solver matters more than how cleverly you restrict it. Both of
+these experiments restricted it, and both restricted it well.
 
 ## 10. Where this leaves the CPU implementation
 
