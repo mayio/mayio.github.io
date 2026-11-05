@@ -15,7 +15,7 @@ This is the dense stereo matcher: a C++14 implementation of [MASDA][gl-masda] �
 [max-sum][gl-maxsum] [loopy belief propagation][gl-lbp] for
 [data association][gl-assoc] — applied to every pixel of an 848×480 infrared pair, on
 a [Jetson TX2][gl-tx2]. [Part 1][p1] derives the message equations and measures the
-[one-to-one constraint][gl-one2one] on sparse keypoints. This post is the algorithm at full frame rate. It covers four things:
+[one-to-one constraint][gl-one2one] on sparse candidate matrices. This post is the algorithm at full frame rate. It covers four things:
 
 - the representation it needs;
 - the parameters that matter;
@@ -178,8 +178,8 @@ a pixel $$k$$ steps away contributes $$a^k = e^{-\sqrt{2}k/\sigma_s}$$. The weig
 falls to $$1/e$$ after $$k = \sigma_s/\sqrt{2}$$ pixels. At the shipping
 $$\sigma_s = 8$$ that is $$a = 0.838$$ and a reach of 5.7 px, with half weight
 already at 3.9 px. At a 30-grey-level edge with $$\sigma_r = 0.2$$ the coefficient
-drops to $$a = 0.36$$, so support dies about four times faster — which is what "the
-filter stops at edges" means numerically.
+drops to $$a = 0.36$$, so support decays about four times faster — the numerical
+meaning of "the filter stops at edges".
 
 The whole stage is about fifteen lines. This is the shipping filter, written in NumPy
 instead of C++:
@@ -266,7 +266,7 @@ never exists:
 
 The insert's common case is a rejection that reads one cached plane, so the whole
 stage is a single streaming pass over the scored planes. Removing the volume measured
-**1.9× end to end**, and it is also what made the accuracy work possible: every
+**1.9× end to end**, and made the accuracy work possible: every
 parameter in [the sweep](#7-what-the-parameters-are-worth) was measured on a pipeline
 fast enough to iterate on.
 
@@ -411,7 +411,7 @@ gate picks a point on it. Sweeping the margin gate across the fifteen v3 scenes:
 This is the only fair way to compare against a matcher that answers a different number
 of pixels. Read at matched coverage, **SGM is ahead**. Read at the shipping gate, this
 matcher has the lower error rate but answers ten points fewer pixels. Both readings
-describe the same picture: SGM's curve sits below this one over the range where they
+describe the same picture: SGM's curve has a lower error rate than this one over the coverage range where they
 overlap.
 
 That is a different conclusion from the one the older eight-scene benchmark supports,
@@ -488,7 +488,7 @@ measured *at all* despite carrying a comment that implied it had.
 recorded a sweep of the *range* parameter $$\sigma_r$$, and $$\sigma_s$$ had simply
 inherited a value:
 
-| $$\sigma_s$$ | 6 | 8 (now) | 10 | 12 (was) | 20 |
+| $$\sigma_s$$ | 6 | 8 (ships) | 10 | 12 | 20 |
 |---|---|---|---|---|---|
 | bad-1.0 | 24.98 | **25.18** | 25.61 | 26.17 | 28.32 |
 | coverage | 79.9% | 79.6% | 79.3% | 78.9% | 77.8% |
@@ -498,8 +498,8 @@ values sit 0.7 above the current operating point. They are read for the shape of
 curve, not for its level.)*
 
 Better on *both* axes at 6–8 than at 12, and it costs nothing: the filter is an IIR whose cost does
-not depend on $$\sigma$$. Now 8. This is the cheapest 0.9 points in the project and it
-was sitting there because a comment about a neighbouring parameter made the value look
+not depend on $$\sigma$$. The shipping value is 8. Those 0.9 points cost zero runtime, and they
+went uncollected only because a comment about a neighbouring parameter made 12 look
 considered.
 
 **The graded cost interacts with the sub-pixel fit, and the benchmarks disagree.** The
@@ -531,8 +531,8 @@ unclaimed:
 | coverage | 79.6% | 79.6% | 73.4% |
 
 Below zero they are not merely flat — a factor of four in magnitude produces a
-**byte-identical** disparity map. They sit far below the score distribution, so the rejection they implement
-almost never fires. Above zero they work. What they do is trade coverage for precision, at roughly the
+**byte-identical** disparity map. Both values are lower than almost every candidate score in the volume, so the rejection they implement
+rarely fires. Above zero they work. What they do is trade coverage for precision, at roughly the
 same exchange rate as the margin gate — which makes them a second gate rather than a
 second mechanism.
 
@@ -598,8 +598,8 @@ Both are present in every row of that table. What is in question is the loopy be
 propagation on top of a *two-candidate* set, which is the case where it has least to
 decide.
 
-Part 1 measured the sparse matcher's advantage with many candidates, on deliberately
-ambiguous projected-dot texture. Temporal association, where the candidate set is
+On the sparse keypoint matcher, where each point has many candidates on deliberately
+ambiguous projected-dot texture, message passing finds 46% more matches than nearest-neighbour. Temporal association, where the candidate set is
 genuinely large and two-dimensional, has not been tested. Message passing is off by default in the dense path and one flag away.
 
 The camera adds a detail the benchmark cannot show. Take a live scene where part of the floor
@@ -725,20 +725,21 @@ benchmark command against Middlebury ground truth.*
 Full citations with DOIs, and every term this post uses, are in the
 [series glossary][gl-appendix].
 
-- [Geiger, Roser, Urtasun, *Efficient Large-Scale Stereo Matching*][gl-elas] (ELAS),
-  ACCV 2010 — support points and a triangulated prior; the canonical "don't sweep" CPU
-  matcher.
-- [Bleyer, Rhemann, Rother, *PatchMatch Stereo*][gl-patchmatch], BMVC 2011 — hypothesis
-  propagation instead of a sweep, and slanted support windows.
-- [Spangenberg et al., *Large Scale Semi-Global Matching on the CPU*][gl-rsgm], IV 2014.
-- [Ruf et al., *ReS2tAC*][gl-res2tac], Sensors 21(11), 2021 — the
-  disparity-in-the-lanes formulation, and the embedded CUDA baseline Part 3 measures
+- [Geiger, A., Roser, M., & Urtasun, R. (2011). *Efficient large-scale stereo matching.*][gl-elas]
+  ACCV 2010, LNCS 6492, 25–38 — support points and a triangulated prior; the canonical "don't sweep" CPU
+  matcher (ELAS).
+- [Bleyer, M., Rhemann, C., & Rother, C. (2011). *PatchMatch Stereo — Stereo matching with slanted support windows.*][gl-patchmatch]
+  BMVC — hypothesis propagation instead of a sweep, and slanted support windows.
+- [Spangenberg, M., Langner, T., Adfeldt, S., & Rojas, R. (2014). *Large scale semi-global matching on the CPU.*][gl-rsgm]
+  IEEE Intelligent Vehicles Symposium, 1118–1124 (rSGM).
+- [Ruf, B., Mohrs, J., Weinmann, M., Hinz, S., & Beyerer, J. (2021). *ReS2tAC — UAV-borne real-time SGM stereo optimized for embedded ARM and CUDA devices.*][gl-res2tac]
+  Sensors, 21(11), 3938 — the disparity-in-the-lanes formulation, and the embedded CUDA baseline Part 3 measures
   against.
-- [Nover, Achar, Goldman, *ESPReSSo*][gl-espresso], 3DV 2018 — edge-aware aggregation
-  under shared plane hypotheses; the one remaining candidate for range restriction that
+- [Nover, H., Achar, S., & Goldman, D. B. (2018). *ESPReSSo: Efficient slanted PatchMatch for real-time spacetime stereo.*][gl-espresso]
+  3DV, 578–586 — edge-aware aggregation under shared plane hypotheses; the one remaining candidate for range restriction that
   produces tile-constant hypotheses by construction.
-- [Shahbazi et al., *Revisiting intrinsic curves for efficient dense stereo
-  matching*][gl-icsg], ISPRS 2016 — the per-pixel range reduction measured in
+- [Shahbazi, M., Sohn, G., Théau, J., & Menard, P. (2016). *Revisiting intrinsic curves for efficient dense stereo matching.*][gl-icsg]
+  ISPRS Annals, III-3, 123–130 — the per-pixel range reduction measured in
   [what did not work](#9-what-did-not-work-and-why).
 
 [p1]: https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/

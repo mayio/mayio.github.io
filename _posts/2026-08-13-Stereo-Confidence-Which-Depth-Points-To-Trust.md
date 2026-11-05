@@ -84,8 +84,8 @@ On eight Middlebury scenes — 1,077,892 points with ground truth, matched with 
 switched off so nothing is scored on a population it has already filtered — the
 population is 10.4% wrong. The measure below closes about three quarters of the distance between chance and
 the oracle. The practical reading is the curve itself. **Keep the best 60% of points
-and three quarters of the errors are gone. Keep the best 40% and it is nine in
-ten.**
+and three quarters of the errors are gone. Keep the best 40% and nine in
+ten are gone.**
 
 | measure | AUC | error at 60% kept |
 |---|---|---|
@@ -293,8 +293,8 @@ Middlebury is a benchmark. The camera this runs on is an infrared stereo pair wi
 [dot projector][gl-d435], on a [Jetson TX2][gl-tx2]. Whether any of this transfers to
 it is a separate question, and it has to be measured there.
 
-Against a flat wall — the cheapest ground truth there is, since scatter about a fitted
-plane *is* the matcher's noise — it does. 6.2% of points sit more than 20 mm off the
+Against a flat wall — the simplest ground truth to set up, since scatter about a fitted
+plane *is* the matcher's noise — the ranking holds. 6.2% of points sit more than 20 mm off the
 wall, falling to **1.3% keeping the best 60%**, and the measure closes 74% of the
 distance to an oracle against 76% on Middlebury. The ordering carries over.
 
@@ -309,8 +309,7 @@ The share of points the frame gets wrong moves by a factor of thirty-one. The me
 confidence it reports moves by nine points. **The measure orders points well inside a
 frame and knows almost nothing about how good the frame is.**
 
-That has a direct practical consequence, and it is the one I would most like a reader
-to take away. A fixed threshold — "keep everything above 0.85" — keeps 6% of points in
+That has a direct practical consequence. A fixed threshold — "keep everything above 0.85" — keeps 6% of points in
 one condition and 18% in another. It throws away most of a good cloud and retains a
 sixth of a hopeless one. **Threshold on the fraction instead.** "Keep the best 40% of this frame" behaves
 identically at midnight and at noon. It is a quantile of a distribution, rather than
@@ -326,15 +325,15 @@ thing to measure, and is not measured yet.
 
 Nothing that shows up in a profile. The two scores were already computed by the
 matcher's own reduction. The reverse match reuses buckets the solver already builds and
-then discards — its message-passing update needs exactly that structure — so it is two
-loops over scratch memory that nothing read afterwards. The model is a logarithm, a divide and
+then discards — its message-passing update needs that exact structure — so it takes two
+loops over scratch memory that would otherwise go unread. The model is a logarithm, a divide and
 an exponential. Per point, the live pipeline sends one extra byte.
 
 The exact reverse match, over all 64 disparities rather than the two candidates that
 survived, would be worth roughly twice as much again. It is also the one piece here that is genuinely slow. On a k-minor cost volume
 the reverse reduction runs along a diagonal, which is uncoalesced by construction.
 Doing it on the GPU means about 26 million atomic maximums per frame, on a device
-already spending 26 ms of its 28.9 ms budget on kernels.
+already spending 26.9 ms of its 31.7 ms frame period on kernels.
 
 That is a trade to make on evidence, not on principle.
 
@@ -364,15 +363,13 @@ already, and is throwing them away.
 
 **References**
 
-- [X. Hu and P. Mordohai, *A Quantitative Evaluation of Confidence Measures for Stereo
-  Vision*][hu], IEEE Transactions on Pattern Analysis and Machine Intelligence 34(11),
-  2012 — the founding survey, the taxonomy the names above come from, and the
+- [Hu, X., & Mordohai, P. (2012). *A quantitative evaluation of confidence measures for stereo vision.*][hu]
+  IEEE Transactions on Pattern Analysis and Machine Intelligence, 34(11), 2121–2133 — the founding survey, the taxonomy the names above come from, and the
   sparsification metric.
-- [M. Poggi, F. Tosi and S. Mattoccia, *On the Confidence of Stereo Matching in a
-  Deep-Learning Era: A Quantitative Evaluation*][poggi], IEEE Transactions on Pattern
-  Analysis and Machine Intelligence, 2021 — 52 measures over five datasets, and the
+- [Poggi, M., Tosi, F., & Mattoccia, S. (2021). *On the confidence of stereo matching in a deep-learning era: A quantitative evaluation.*][poggi]
+  IEEE Transactions on Pattern Analysis and Machine Intelligence, 44(9), 5293–5309 — 52 measures over five datasets, and the
   finding that local aggregation is what makes a hand-crafted measure good.
-- [D. Scharstein and R. Szeliski, Middlebury Stereo Datasets](https://vision.middlebury.edu/stereo/) —
+- [Scharstein, D., & Szeliski, R. (2003). *Middlebury Stereo Datasets.*](https://vision.middlebury.edu/stereo/) —
   the ground truth every number on the benchmark side of this post is scored against.
 
 [hu]: https://doi.org/10.1109/TPAMI.2012.46

@@ -64,7 +64,7 @@ scenes with [structured-light ground truth](/masda-glossary/#structured-light-gr
   matrices: 7.2 s per frame. On sparse matrices: **0.38 s — 19×** — and 20× faster
   than compiled per-row Jonker-Volgenant. The engineered C++ descendant of this
   NumPy study solves the same frames in ~11 ms, and the full GPU pipeline of
-  Part 3 runs at 28.9 ms per frame end to end.
+  Part 3 runs at 31.7 ms per frame end to end.
 
 Everything is regenerable: `article/dense_sparse_matrices.py` produces every
 number in this post from the shipping binary's own cost volume, so the NumPy
@@ -224,11 +224,11 @@ pixels marked unknown. The [dataset page](https://vision.middlebury.edu/stereo/d
 states: "We grant permission to use and publish all images and disparity maps on
 this website."
 
-> D. Scharstein and R. Szeliski (2003). *High-accuracy stereo depth maps using
-> structured light.* CVPR, 195-202.
+> Scharstein, D., & Szeliski, R. (2003). *High-accuracy stereo depth maps using
+> structured light.* CVPR, 195–202.
 > [doi:10.1109/CVPR.2003.1211354](https://doi.org/10.1109/CVPR.2003.1211354)
 
-> D. Scharstein and C. Pal (2007). *Learning conditional random fields for stereo.*
+> Scharstein, D., & Pal, C. (2007). *Learning conditional random fields for stereo.*
 > CVPR.
 > [doi:10.1109/CVPR.2007.383191](https://doi.org/10.1109/CVPR.2007.383191)
 
@@ -321,11 +321,11 @@ Sharma require for [max-product](/masda-glossary/#max-sum-max-product-and-sum-pr
 correct on bipartite matching. So the
 degenerate case is not an edge case to patch around; it is where the guarantee
 stops. [Section 4](#4-results-against-ground-truth) measures how often that happens on
-dense rows, and it is often.
+dense rows: on roughly half of them.
 
-> Bayati, M., Shah, D., & Sharma, M. (2008). *Max-Product for Maximum Weight
-> Matching: Convergence, Correctness, and LP Duality.* IEEE Transactions on
-> Information Theory, 54(3), 1241-1251.
+> Bayati, M., Shah, D., & Sharma, M. (2008). *Max-product for maximum weight
+> matching: Convergence, correctness, and LP duality.* IEEE Transactions on
+> Information Theory, 54(3), 1241–1251.
 > [doi:10.1109/TIT.2007.915695](https://doi.org/10.1109/TIT.2007.915695)
 
 Two questions were tangled together:
@@ -490,8 +490,8 @@ and 90.2% on the same scenes.
 
 Read that as three statements. Over the pixels it answers, this matcher's error rate
 is the lower one. It answers ten points fewer of them. And at matched coverage SGM is
-ahead: on [Part 2's precision–coverage curve][p2-curve] SGM sits below this matcher
-across the range where the two overlap, and a lower curve is a better one.
+ahead: on [Part 2's precision–coverage curve][p2-curve] SGM has a lower error rate
+than this matcher across the coverage range where the two overlap.
 
 On the eight 2003/2005 scenes at native resolution it measures 9.8% against OpenCV
 SGM's 10.9%. Both are real; the harder
@@ -532,8 +532,8 @@ Bayati-Shah-Sharma guarantee fails routinely.
 
 **And the gap costs nothing.** Two iterations sit 0.8% short of the optimal
 objective with 1.6% of rows optimal; thirty iterations close that to 0.08% and 47%
-— and return no extra precision whatsoever. The objective is a proxy, and this is the cleanest evidence I have that it is a
-loose one. An 0.8% objective deficit and a 30× shortfall in exactly-solved rows are
+— and return no extra precision whatsoever. The objective is a loose proxy for
+accuracy. A 0.8% objective deficit and a 30× shortfall in exactly-solved rows are
 both invisible in the only quantity a consumer experiences.
 
 ### 4.3 Two iterations against thirty
@@ -592,7 +592,7 @@ how much precision to read into any single row of this table.
 These are study numbers, not production numbers. The identical algorithm in C++
 (Part 2) solves a frame in ~11 ms on a desktop and ~23 ms on the Jetson TX2's ARM
 cores. The full GPU pipeline (Part 3) runs cost volume, aggregation and solve
-together at 28.9 ms per frame at 848×480, bit-identical to the C++ output. Five orders of magnitude between the first table's first row and the
+together at 31.7 ms per frame at 848×480, bit-identical to the C++ output. Five orders of magnitude between the first table's first row and the
 shipping pipeline, and not one change to the messages: representation,
 then engineering.
 
@@ -746,11 +746,11 @@ crosses nothing at all.
 Exact, $$O(N^3)$$, and here exactly as good as
 MASDA where it can be run at all ([section 4.2](#42-against-the-exact-optimum)).
 For a pure assignment problem of moderate size, use it. MASDA is the better choice on
-speed at scale — 6.4× in NumPy, far more engineered — and when you intend to add
+speed at scale — 20× at 2 iterations (6.4× at 30) in NumPy, far more engineered — and when you intend to add
 factors that stop the problem being a LAP.
 
 > Jonker, R., & Volgenant, A. (1987). *A shortest augmenting path algorithm for
-> dense and sparse linear assignment problems.* Computing, 38(4), 325-340.
+> dense and sparse linear assignment problems.* Computing, 38(4), 325–340.
 > [doi:10.1007/BF02278710](https://doi.org/10.1007/BF02278710)
 
 **[SPADA / sum-product data association](/masda-glossary/#spada).** Produces marginal association
@@ -768,7 +768,7 @@ are learned rather than set. That points straight at the weakest part of what I 
 here.
 
 > Sarlin, P.-E., DeTone, D., Malisiewicz, T., & Rabinovich, A. (2020).
-> *SuperGlue: Learning Feature Matching with Graph Neural Networks.* CVPR.
+> *SuperGlue: Learning feature matching with graph neural networks.* CVPR, 4938–4947.
 > [arXiv:1911.11763](https://arxiv.org/abs/1911.11763)
 
 **[Semi-global matching](/masda-glossary/#semi-global-matching).** The standard fast dense method,
@@ -776,28 +776,28 @@ and the direct
 competitor now that this formulation is dense too. SGM aggregates
 [smoothness](/masda-glossary/#smoothness-prior)
 along scanline paths and has **no uniqueness constraint at all** — a
-[left-right consistency check](/masda-glossary/#left-right-consistency-check) is added afterwards
+[left-right consistency check](/masda-glossary/#left-right-consistency-check) is added
 afterwards, which costs a second matcher run.
 MASDA gets mutual exclusivity inside the inference, in one run, plus a per-pixel
 confidence (the [margin](/masda-glossary/#margin-and-the-margin-gate)) as a by-product. Part 2 measures the two head-to-head. Over these eight scenes at native resolution
-it reads **9.2% bad-1.0 against OpenCV SGM's 10.9%**, at 76% coverage against 78%.
+it reads **9.8% bad-1.0 against OpenCV SGM's 10.9%**, at 79.6% coverage against 78%.
 On the harder v3 set it sits behind Middlebury's own SGM reference, where the two
 curves cross the other way. The two mechanisms are orthogonal, and the interesting object — a
 factor graph with both uniqueness and path smoothness — does not exist in either
 tool today.
 
-> Hirschmüller, H. (2008). *Stereo Processing by Semiglobal Matching and Mutual
-> Information.* IEEE TPAMI, 30(2), 328-341.
+> Hirschmüller, H. (2008). *Stereo processing by semiglobal matching and mutual
+> information.* IEEE Transactions on Pattern Analysis and Machine Intelligence, 30(2), 328–341.
 > [doi:10.1109/TPAMI.2007.1166](https://doi.org/10.1109/TPAMI.2007.1166)
 
 **[ELAS](/masda-glossary/#elas)** narrows a dense search around triangulated support points — the
 avoid-the-sweep family, alongside [PatchMatch](/masda-glossary/#patchmatch-stereo) and
 [rSGM](/masda-glossary/#rsgm). Part 2 measured this project's version of that idea (a
-[coarse-to-fine](/masda-glossary/#coarse-to-fine) mask) at accuracy parity and recorded exactly
-where its speedup goes to die on embedded hardware.
+[coarse-to-fine](/masda-glossary/#coarse-to-fine) mask) at accuracy parity and recorded
+where its speedup is lost on embedded hardware.
 
-> Geiger, A., Roser, M., & Urtasun, R. (2011). *Efficient Large-Scale Stereo
-> Matching.* ACCV 2010, LNCS 6492, 25-38.
+> Geiger, A., Roser, M., & Urtasun, R. (2011). *Efficient large-scale stereo
+> matching.* ACCV 2010, LNCS 6492, 25–38.
 > [doi:10.1007/978-3-642-19315-6_3](https://doi.org/10.1007/978-3-642-19315-6_3)
 
 ---
@@ -810,12 +810,12 @@ Where MASDA on sparse matrices is the right choice:
   candidates per pixel, that is 19× over the same solver on dense matrices and
   20× over compiled exact assignment, before any engineering.
 - It is indistinguishable from optimal on precision, while being measurably
-  non-optimal on the objective — the useful direction of that trade.
+  non-optimal on the objective — the useful direction for a stereo matcher.
 - It is anytime, and [section 4.3](#43-two-iterations-against-thirty) puts a
   number on it: two iterations give the same precision as thirty, at a quarter of
   the cost. The decision stabilises an order of magnitude before the messages do,
   which is why the C++ implementation ships with two.
-- It extends, and this is the main reason to prefer it over an exact
+- It extends to higher-order or pairwise constraints, which is the main reason to prefer it over an exact
   [LAP solver](/masda-glossary/#linear-assignment-problem).
   Adding an [ordering](/masda-glossary/#ordering-constraint), [smoothness](/masda-glossary/#smoothness-prior) or
   temporal factor keeps a [factor graph](/masda-glossary/#factor-graph) a factor
@@ -835,8 +835,8 @@ Where it is not:
   theory promised it, and [section 4.2](#42-against-the-exact-optimum) is the record.
 - It cannot create information. Where the aggregated evidence is degenerate it
   produces confident wrong answers; the margin gate exists to convert those back
-  into abstentions, at the price of coverage. **The gate has a blind spot of its
-  own**, and it is structural rather than a tuning failure: best-minus-second is
+  into abstentions, at the price of coverage. **The gate has a structural blind spot of its
+  own:** best-minus-second is
   only defined over the candidates that were searched. Where the true match lies
   outside the disparity range, or off the edge of the other image, the winner has
   no real competitor and the margin is therefore *large*. A confidence read from
@@ -860,14 +860,14 @@ Neighbouring pixels on the same surface have similar disparity, and the current
 factor graph ignores that entirely.
 [Section 6](#6-can-masda-express-the-ordering-constraint) now measures ordering
 rather than leaving it open, and the question it leaves behind is whether a
-neighbourhood factor gains where ordering did not. The cheap
+neighbourhood factor gains where ordering did not. The single-pass
 variants are measured negatives (Part 2's record); the real derivation — path
 aggregation as factors, so uniqueness and smoothness live in one graph — is the
 interesting object this formulation makes possible.
 
-**[Sub-pixel disparity](/masda-glossary/#sub-pixel-disparity) — since built, and it was the
+**[Sub-pixel disparity](/masda-glossary/#sub-pixel-disparity) — the
 largest accuracy result in the project.** The candidates are integer, which forfeits up
-to half a pixel before any matching error. A parabola through the aggregated cost at
+to half a pixel before any matching error. A sub-pixel curve fit through the aggregated cost at
 the winner and its two neighbours took the engineered matcher from 41.5% to 24.5%
 bad-1.0 at unchanged coverage. [Part 2][p2] has the construction and the reason it
 went unmeasured for so long: the benchmark in use could not resolve it.

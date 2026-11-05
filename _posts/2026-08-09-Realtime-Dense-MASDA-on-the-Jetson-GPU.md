@@ -20,12 +20,11 @@ suit different processors, and the TX2 has both.
 
 One half is regular. Census, the cost, the filter and the top-2 selection touch every
 pixel at every disparity, in a pattern fixed at compile time. The other half is
-irregular: the solver walks a different candidate list for each pixel, and it is small
-enough that four ARM cores finish a frame in 11 ms.
+irregular: the solver walks a different candidate list for each pixel. Because only
+two candidates survive per pixel, four ARM cores finish a frame in 11 ms.
 
 Matching the two halves to the two processors is most of the design. What remains is
-memory layout, and that is where the surprise sits: the two machines want opposite
-layouts.
+memory layout: the two machines want opposite layouts.
 
 *Every term is defined in the [series glossary][gl-appendix]. [Part 1][p1] derives the
 message equations; [Part 2][p2] is the matcher this post makes real-time.*
@@ -46,12 +45,12 @@ scene brightness. Without it, coverage is whatever the room happens to provide:
 38.6%, 80.1%, 81.1%. **What the projector is worth is exactly what the room does not
 already supply** — 49.5 points at night, 7.7 in the evening, 3.6 in the morning.
 
-The trend in the middle row runs the wrong way, and that is worth stating: more
+The trend in the middle row runs the wrong way: more
 ambient light makes the projector-lit result slightly *worse*, 88.1% down to 84.7%.
 Brighter rooms force a shorter exposure and still clip more of the frame — 0%, 3.4%,
 8.6% of pixels at 255 — and a saturated pixel carries no texture at all. The brightest
-column is a lamp plus morning daylight through a window, which is the condition a
-vehicle would meet outdoors, and it is the worst of the three for this matcher.
+column combines a lamp with morning daylight through a window, the condition a
+vehicle meets outdoors, and yields the lowest coverage of the three for this matcher.
 
 Exposure is set per condition — 4000, 2500 and 1500 µs — each being the value that
 holds 3–5 DN of local contrast in that room. One fixed exposure across a 4.5× range of
@@ -72,9 +71,9 @@ The two halves of the matcher differ in kind:
 - **The cost side is regular.** Census, the graded cost, the [recursive
   filter][gl-rf] and the top-2 selection touch every (pixel, disparity) pair in a
   pattern known at compile time. No data-dependent branching, no irregular memory.
-- **The solve side is irregular.** [MASDA's][gl-masda] [messages][gl-messages] and its
-  decode walk claimant lists per right pixel
-  and applies a [greedy][gl-greedy] one-to-one assignment over a sorted order. It is
+- **The solve side is irregular.** [MASDA's][gl-masda] [messages][gl-messages] and
+  decode walk the claimant lists for each right pixel
+  and apply a [greedy][gl-greedy] one-to-one assignment in score order. It is
   also *small*: with two candidates per pixel the whole row problem fits in 28 KB of
   cache, and four ARM cores handle a full frame in ~11 ms.
 
@@ -131,7 +130,7 @@ $$t{+}1$$ while the CPU works on frame $$t$$:
 
 Three details make the overlap real rather than hopeful.
 
-**The fetch runs on its own thread.** `cudaMemcpy` serializes with the stream, so the
+**The fetch runs on its own thread.** `cudaMemcpy` serialises with the stream, so the
 fetcher blocks until frame $$t{+}1$$'s kernels finish and then copies — while the
 decode of frame $$t$$ is still on the A57s. Before this, the copy sat serially in the
 loop.
@@ -312,8 +311,7 @@ Measured steady state, pipelined over 30 frames, best of three at locked clocks:
 $$D=64$$ measures 25.6, while $$D=65$$ measures 41.8 and $$D=128$$ measures 42.4. So
 $$D=128$$ costs nothing if you are already computing $$D=96$$, and **asking for fewer than
 64 disparities saves nothing at all** — it computes the same block and discards part of
-it. $$D=64$$ is therefore the only sensible setting below the step, and it is where the
-matcher runs. 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget. No
+it. $$D=64$$ is therefore the only sensible setting below the step, and the matcher runs there. 848×480 at $$D=64$$ closes 30 Hz at 95% of the frame budget. No
 other configuration does. On a vehicle the board will get hot and slow itself down,
 which reduces that margin. When it does, the pipeline drops to 15 Hz instead of failing.
 
@@ -333,8 +331,8 @@ resolutions are Middlebury scenes at their native sizes.
 recursive filter is the hardest part to port. It is a recurrence: every step depends on
 the one before it, in integer arithmetic, with truncation. So the classic [block-parallel formulation (Nehab et al.)][gl-nehab], which
 reassociates the filter algebraically, cannot reproduce it bit-exactly. My first
-alternative kept bit-exactness by letting the 32 lanes take turns via shuffles:
-coalesced, exact, and 31 of the 32 lanes idle at every serial step. The limit was
+alternative kept bit-exactness by loading coalesced rows and stepping through the 32 lanes one at a time via warp shuffles.
+It was coalesced and bit-exact, but 31 of the 32 lanes sat idle at every serial step. The limit was
 instruction throughput, not memory bandwidth. The $$k$$-minor layout removed the
 question entirely:
 a lane per *disparity* rather than per *position* means every lane runs its own
@@ -378,7 +376,7 @@ a broken overlap breaks the identity check instead of passing quietly.
 
 It also means the accuracy story needs no new evidence. The GPU produces the same bytes, so Part 2's measurements are the GPU's
 measurements. That includes the ones that went against expectation: the
-[sub-pixel fit][gl-subpix] being worth fifteen points, and the message passing not
+[sub-pixel fit][gl-subpix] reducing bad-1.0 by 17 points, and the message passing not
 being worth its cost in the dense path.
 
 ## 7.1 The whole frame in one table
@@ -458,11 +456,10 @@ What is genuinely unfinished:
 Full citations with DOIs, and every term this post uses, are in the
 [series glossary][gl-appendix].
 
-- [Ruf et al., *ReS2tAC — UAV-Borne Real-Time SGM Stereo Optimized for Embedded ARM and
-  CUDA Devices*][gl-res2tac], Sensors 21(11), 2021 — disparity-in-the-lanes, and the
-  embedded CUDA baseline this design is measured against.
-- [Nehab, Maximo, Lima, Hoppe, *GPU-Efficient Recursive Filtering and Summed-Area
-  Tables*][gl-nehab], SIGGRAPH Asia 2011 — the block-parallel recursive filter, and by
+- [Ruf, B., Mohrs, J., Weinmann, M., Hinz, S., & Beyerer, J. (2021). *ReS2tAC — UAV-borne real-time SGM stereo optimized for embedded ARM and CUDA devices.*][gl-res2tac]
+  Sensors, 21(11), 3938 — disparity-in-the-lanes, and the embedded CUDA baseline this design is measured against.
+- [Nehab, D., Maximo, A., Lima, R. S., & Hoppe, H. (2011). *GPU-efficient recursive filtering and summed-area tables.*][gl-nehab]
+  ACM Transactions on Graphics, 30(6), 176 (SIGGRAPH Asia) — the block-parallel recursive filter, and by
   its existence the explanation of why a warp-serial scan loses.
 - Parts [1][p1] and [2][p2] of this series — the derivation, and the matcher this post
   makes real-time.

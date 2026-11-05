@@ -16,9 +16,9 @@ The series:
 1. [Dense Stereo Matching with Max-Sum Belief Propagation on Sparse Matrices
    (MASDA)](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/) — the formulation, and what the one-to-one constraint is worth
    against ground truth.
-2. [Dense Stereo Matching with Max-Sum Belief Propagation on a Jetson TX2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/)
+2. [Dense Stereo Matching with Max-Sum Belief Propagation on a Jetson TX2 (MASDA, Part 2)](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/)
    — the same algorithm as a shipping C++ matcher, measured against SGM.
-3. [Real-Time Dense Stereo at 34 Hz on a Jetson TX2](https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/) — the image plane on
+3. [Real-Time Dense Stereo on a Jetson TX2 (MASDA, Part 3)](https://www.mariolueder.com/2026-08-09-Realtime-Dense-MASDA-on-the-Jetson-GPU/) — the image plane on
    the GPU, the graph on the CPU, bit-identically.
 
 Terms in all three link here on first use. If the inference machinery is new to
@@ -42,8 +42,8 @@ neighbours". The canonical reference is Kschischang, Frey and Loeliger. My own w
 introduction, with code, is the [loopy belief propagation
 post](https://www.mariolueder.com/2022-09-17-Loopy-Belief-Propagation/#factor-graphs).
 
-> F. R. Kschischang, B. J. Frey, H.-A. Loeliger (2001). *Factor graphs and the
-> sum-product algorithm.* IEEE Transactions on Information Theory 47(2), 498-519.
+> Kschischang, F. R., Frey, B. J., & Loeliger, H.-A. (2001). *Factor graphs and the
+> sum-product algorithm.* IEEE Transactions on Information Theory, 47(2), 498–519.
 > [doi:10.1109/18.910572](https://doi.org/10.1109/18.910572)
 
 ### Loopy belief propagation
@@ -57,9 +57,9 @@ both a row constraint and a column constraint, so four-cycles are everywhere
 ([section 1.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#11-factor-graph)). Weiss and Freeman give the theoretical account
 of what a fixed point of the max-product version does and does not mean.
 
-> Y. Weiss, W. T. Freeman (2001). *On the optimality of solutions of the
+> Weiss, Y., & Freeman, W. T. (2001). *On the optimality of solutions of the
 > max-product belief-propagation algorithm in arbitrary graphs.* IEEE Transactions
-> on Information Theory 47(2), 736-744.
+> on Information Theory, 47(2), 736–744.
 > [doi:10.1109/18.910585](https://doi.org/10.1109/18.910585)
 
 Two earlier posts of mine build loopy BP from scratch — [on a
@@ -92,12 +92,12 @@ derivation the [original MASDA
 post](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/#masda)
 follows.
 
-> B. J. Frey, D. Dueck (2007). *Clustering by passing messages between data
-> points.* Science 315(5814), 972-976.
+> Frey, B. J., & Dueck, D. (2007). *Clustering by passing messages between data
+> points.* Science, 315(5814), 972–976.
 > [doi:10.1126/science.1136800](https://doi.org/10.1126/science.1136800)
 
-> I. E. Givoni, B. J. Frey (2009). *A Binary Variable Model for Affinity
-> Propagation.* Neural Computation 21(6), 1589-1600.
+> Givoni, I. E., & Frey, B. J. (2009). *A binary variable model for affinity
+> propagation.* Neural Computation, 21(6), 1589–1600.
 > [doi:10.1162/neco.2009.05-08-785](https://doi.org/10.1162/neco.2009.05-08-785)
 
 ### Belief
@@ -162,9 +162,9 @@ assignment. The right choice when a downstream consumer wants soft weights, and
 slower. Williams and Lau are the reference treatment. The original post sets
 [SPADA against MASDA directly](https://www.mariolueder.com/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA/#spada-sum-product-algorithm-data-association-and-masda-max-sum-algorithm-data-association).
 
-> J. Williams, R. Lau (2014). *Approximate evaluation of marginal association
+> Williams, J. L., & Lau, R. A. (2014). *Approximate evaluation of marginal association
 > probabilities with belief propagation.* IEEE Transactions on Aerospace and
-> Electronic Systems 50(4), 2942-2959.
+> Electronic Systems, 50(4), 2942–2959.
 > [arXiv:1209.6299](https://arxiv.org/abs/1209.6299)
 
 ### Clutter and misdetection
@@ -184,8 +184,8 @@ from chance to perfect".
 Also *uniqueness* or *mutual exclusivity*: at most one association per measurement
 and at most one per object. It is physically true in stereo, because one surface
 point projects once into each image. Enforcing it inside the inference is what this
-whole series is testing, and [section 4.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#41-what-uniqueness-is-worth) prices it
-at +10.7 points of precision over [winner-take-all](#winner-take-all) on identical
+whole series is testing, and [section 4.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#41-what-uniqueness-is-worth) measures it
+at +11.5 points of precision over [winner-take-all](#winner-take-all) on identical
 scores.
 
 ### Linear assignment problem
@@ -206,12 +206,12 @@ truth for the *answer*.
 [Section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum) runs per-row JV over every row of two
 scenes, and finds MASDA's precision indistinguishable from exact.
 
-> H. W. Kuhn (1955). *The Hungarian method for the assignment problem.* Naval
-> Research Logistics Quarterly 2(1-2), 83-97.
+> Kuhn, H. W. (1955). *The Hungarian method for the assignment problem.* Naval
+> Research Logistics Quarterly, 2(1–2), 83–97.
 > [doi:10.1002/nav.3800020109](https://doi.org/10.1002/nav.3800020109)
 
-> R. Jonker, A. Volgenant (1987). *A shortest augmenting path algorithm for dense
-> and sparse linear assignment problems.* Computing 38(4), 325-340.
+> Jonker, R., & Volgenant, A. (1987). *A shortest augmenting path algorithm for dense
+> and sparse linear assignment problems.* Computing, 38(4), 325–340.
 > [doi:10.1007/BF02278710](https://doi.org/10.1007/BF02278710)
 
 ### LP relaxation and the uniqueness condition
@@ -226,9 +226,9 @@ exact ties are routine, so the condition fails on roughly half the rows
 ([section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum)) — measured here, not predicted by
 the theory.
 
-> M. Bayati, D. Shah, M. Sharma (2008). *Max-Product for Maximum Weight Matching:
-> Convergence, Correctness, and LP Duality.* IEEE Transactions on Information
-> Theory 54(3), 1241-1251.
+> Bayati, M., Shah, D., & Sharma, M. (2008). *Max-product for maximum weight matching:
+> Convergence, correctness, and LP duality.* IEEE Transactions on Information
+> Theory, 54(3), 1241–1251.
 > [doi:10.1109/TIT.2007.915695](https://doi.org/10.1109/TIT.2007.915695)
 
 ### Objective ratio
@@ -236,7 +236,7 @@ the theory.
 The total score of MASDA's assignment divided by the exact optimum's, per row —
 1.0 meaning "MASDA found an optimal assignment". Reported alongside precision in
 [section 4.2](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#42-against-the-exact-optimum), because the two disagree
-instructively. Closing an 0.8% objective gap gains no precision at all. That makes
+instructively. Closing a 0.8% objective gap gains no precision at all. That makes
 the objective a demonstrably loose proxy for the quantity a consumer experiences.
 
 ### Greedy decode
@@ -290,8 +290,8 @@ real but poor trade on the dense problem. Note that thin foreground objects
 genuinely violate ordering, which is why $$\kappa$$ stays finite and why DP methods
 need forbidden-move exceptions.
 
-> Y. Ohta, T. Kanade (1985). *Stereo by Intra- and Inter-Scanline Search Using
-> Dynamic Programming.* IEEE TPAMI 7(2), 139-154.
+> Ohta, Y., & Kanade, T. (1985). *Stereo by intra- and inter-scanline search using
+> dynamic programming.* IEEE Transactions on Pattern Analysis and Machine Intelligence, 7(2), 139–154.
 > [doi:10.1109/TPAMI.1985.4767639](https://doi.org/10.1109/TPAMI.1985.4767639)
 
 ### Fenwick tree
@@ -302,8 +302,8 @@ and no pointers. It is the standard way to count crossing pairs without enumerat
 it turns from an optimisation into a precondition: with about 2,400 crossing pairs
 per row, the quadratic enumeration is the whole cost.
 
-> P. M. Fenwick (1994). *A new data structure for cumulative frequency tables.*
-> Software: Practice and Experience 24(3), 327-336.
+> Fenwick, P. M. (1994). *A new data structure for cumulative frequency tables.*
+> Software: Practice and Experience, 24(3), 327–336.
 > [doi:10.1002/spe.4380240306](https://doi.org/10.1002/spe.4380240306)
 
 ### Sinkhorn, optimal transport and SuperGlue
@@ -316,15 +316,15 @@ zero-temperature limit of that relaxation.
 
 SuperGlue is the influential learned instance. The structure is the same, but the
 scores come from an attention network and the dustbin costs are learned rather than
-hand-set. That is exactly the weakness
+hand-set. That is the weakness
 [section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it)
-admits to.
+notes.
 
-> M. Cuturi (2013). *Sinkhorn Distances: Lightspeed Computation of Optimal
-> Transport.* NeurIPS. [arXiv:1306.0895](https://arxiv.org/abs/1306.0895)
+> Cuturi, M. (2013). *Sinkhorn distances: Lightspeed computation of optimal
+> transport.* NeurIPS, 2292–2300. [arXiv:1306.0895](https://arxiv.org/abs/1306.0895)
 
-> P.-E. Sarlin, D. DeTone, T. Malisiewicz, A. Rabinovich (2020). *SuperGlue:
-> Learning Feature Matching with Graph Neural Networks.* CVPR.
+> Sarlin, P.-E., DeTone, D., Malisiewicz, T., & Rabinovich, A. (2020). *SuperGlue:
+> Learning feature matching with graph neural networks.* CVPR, 4938–4947.
 > [arXiv:1911.11763](https://arxiv.org/abs/1911.11763)
 
 ## Stereo vision
@@ -341,8 +341,8 @@ matcher embarrassingly parallel, and in Part 3 a GPU kernel.
 Hartley and Zisserman's book is the standard treatment. Loop and Zhang is the
 classic algorithm.
 
-> C. Loop, Z. Zhang (1999). *Computing rectifying homographies for stereo vision.*
-> CVPR. [doi:10.1109/CVPR.1999.786928](https://doi.org/10.1109/CVPR.1999.786928)
+> Loop, C., & Zhang, Z. (1999). *Computing rectifying homographies for stereo vision.*
+> CVPR, 125–131. [doi:10.1109/CVPR.1999.786928](https://doi.org/10.1109/CVPR.1999.786928)
 
 ### Disparity
 
@@ -380,8 +380,8 @@ pipeline codified in Scharstein and Szeliski's taxonomy. Part 2's second section
 about never materialising it — with two candidates per pixel, the running top-2
 *is* the reduced volume — and Part 3 fuses away even the intermediate planes.
 
-> D. Scharstein, R. Szeliski (2002). *A Taxonomy and Evaluation of Dense Two-Frame
-> Stereo Correspondence Algorithms.* IJCV 47(1-3), 7-42.
+> Scharstein, D., & Szeliski, R. (2002). *A taxonomy and evaluation of dense two-frame
+> stereo correspondence algorithms.* International Journal of Computer Vision, 47(1–3), 7–42.
 > [doi:10.1023/A:1014573219977](https://doi.org/10.1023/A:1014573219977)
 
 ### Census transform
@@ -397,12 +397,12 @@ The *centre-symmetric* variant compares opposing neighbour pairs instead, which
 halves the bits. Part 2 measured it as worth 10% of runtime on the Jetson and 1.2
 points of accuracy, and left it off.
 
-> R. Zabih, J. Woodfill (1994). *Non-parametric local transforms for computing
-> visual correspondence.* ECCV, LNCS 801, 151-158.
+> Zabih, R., & Woodfill, J. (1994). *Non-parametric local transforms for computing
+> visual correspondence.* ECCV, LNCS 801, 151–158.
 > [doi:10.1007/BFb0028345](https://doi.org/10.1007/BFb0028345)
 
-> H. Hirschmüller, D. Scharstein (2009). *Evaluation of Stereo Matching Costs on
-> Images with Radiometric Differences.* IEEE TPAMI 31(9), 1582-1599.
+> Hirschmüller, H., & Scharstein, D. (2009). *Evaluation of stereo matching costs on
+> images with radiometric differences.* IEEE Transactions on Pattern Analysis and Machine Intelligence, 31(9), 1582–1599.
 > [doi:10.1109/TPAMI.2008.221](https://doi.org/10.1109/TPAMI.2008.221)
 
 ### Hamming distance and popcount
@@ -423,8 +423,8 @@ where Census is nearly saturated, which Part 2 measured at 10.3% → 9.7% bad-1.
 itself. Combining a binary descriptor with an intensity term this way is
 established practice — ADCensus is the well-known instance.
 
-> X. Mei, X. Sun, M. Zhou, S. Jiao, H. Wang, X. Zhang (2011). *On building an
-> accurate stereo matching system on graphics hardware.* ICCV Workshops.
+> Mei, X., Sun, X., Zhou, M., Jiao, S., Wang, H., & Zhang, X. (2011). *On building an
+> accurate stereo matching system on graphics hardware.* ICCV Workshops, 467–474.
 > [doi:10.1109/ICCVW.2011.6130280](https://doi.org/10.1109/ICCVW.2011.6130280)
 
 ### Cost aggregation
@@ -441,8 +441,8 @@ memory, and why two of Part 2's negative results follow from that one constraint
 It is the third stage of the classical taxonomy, and on this project the stage
 with the largest effect on accuracy. One 7×7 Census comparison quantises to 49 levels, and Part 2
 measured unaggregated scores at 28.1% bad against 12.7% for SGM stripped of its
-smoothness term entirely. In factor-graph language, better unaries beat a computationally cheap pairwise term —
-which is also why the cheap smoothness factor is a recorded negative result.
+smoothness term entirely. In factor-graph language, better unaries beat a simple pairwise term —
+which is also why the single-pass smoothness factor is a recorded negative result.
 
 ### Edge-aware recursive filter
 
@@ -465,11 +465,11 @@ $$\sigma_s$$ is free to tune. It belongs to the domain-transform and non-local a
 exact recurrence, the integer coefficients and the truncation all matter here,
 because Part 3 reproduces them bit-for-bit on the GPU.
 
-> E. S. L. Gastal, M. M. Oliveira (2011). *Domain transform for edge-aware image
-> and video processing.* ACM TOG 30(4).
+> Gastal, E. S. L., & Oliveira, M. M. (2011). *Domain transform for edge-aware image
+> and video processing.* ACM Transactions on Graphics, 30(4), 69.
 > [doi:10.1145/2010324.1964964](https://doi.org/10.1145/2010324.1964964)
 
-> Q. Yang (2012). *A non-local cost aggregation method for stereo matching.* CVPR.
+> Yang, Q. (2012). *A non-local cost aggregation method for stereo matching.* CVPR, 1402–1409.
 > [doi:10.1109/CVPR.2012.6247827](https://doi.org/10.1109/CVPR.2012.6247827)
 
 ### Smoothness prior
@@ -477,7 +477,7 @@ because Part 3 reproduces them bit-for-bit on the GPU.
 A pairwise term that penalises disparity differences between neighbouring pixels,
 on the argument that surfaces are mostly continuous. It is the mechanism
 [SGM](#semi-global-matching) is built on, and the one this factor graph does *not*
-have. Two computationally cheap versions were tried here and are recorded as negatives, worse at every
+have. Two single-pass versions were tried here and are recorded as negatives, worse at every
 weight. The mechanism is the reason: on a quantised Census volume, the information
 a neighbour smoothness term would add is better added by
 [aggregating the unaries](#cost-aggregation). The interesting unbuilt object is a
@@ -490,8 +490,8 @@ Take each pixel's best-scoring disparity and stop — no uniqueness, no interact
 between pixels. It is the baseline every stereo matcher has to beat. It is also the comparison that
 isolates what the [one-to-one constraint](#one-to-one-constraint) contributes,
 because it can be run on *identical* scores
-([section 4.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#41-what-uniqueness-is-worth)): 0.776 precision against MASDA's
-0.884.
+([section 4.1](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#41-what-uniqueness-is-worth)): 0.775 precision against greedy uniqueness's
+0.890 and 2-iteration MASDA's 0.883.
 
 ### Semi-global matching
 
@@ -506,8 +506,8 @@ Part 2's curve puts SGM ahead.
 The two mechanisms are orthogonal, and a factor graph carrying both uniqueness and
 path smoothness is the interesting object neither tool implements today.
 
-> H. Hirschmüller (2008). *Stereo Processing by Semiglobal Matching and Mutual
-> Information.* IEEE TPAMI 30(2), 328-341.
+> Hirschmüller, H. (2008). *Stereo processing by semiglobal matching and mutual
+> information.* IEEE Transactions on Pattern Analysis and Machine Intelligence, 30(2), 328–341.
 > [doi:10.1109/TPAMI.2007.1166](https://doi.org/10.1109/TPAMI.2007.1166)
 
 ### Left-right consistency check
@@ -522,17 +522,18 @@ raising the message-passing iterations there increased the number of points on a
 demonstrably false surface rather than suppressing them. The two properties are
 usually named together and are not the same property.
 
-> P. Fua (1993). *A parallel stereo algorithm that produces dense depth maps and
-> preserves image features.* Machine Vision and Applications 6(1), 35-49.
+> Fua, P. (1993). *A parallel stereo algorithm that produces dense depth maps and
+> preserves image features.* Machine Vision and Applications, 6(1), 35–49.
 > [doi:10.1007/BF01212430](https://doi.org/10.1007/BF01212430)
 
 ### Sub-pixel disparity
 
 Fitting a curve to the scores around the winning integer disparity to recover a
-fractional answer. It is the refinement stage of the classical taxonomy, and it matters more for
-metric depth accuracy than anything else downstream. It is not implemented here,
-which [section 9](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#9-what-would-improve-it)
-records as an open item rather than a detail.
+fractional answer. It is the refinement stage of the classical taxonomy, and the single largest accuracy result in this project:
+in [Part 2's section 2](https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/#2-sub-pixel-disparity-the-largest-accuracy-result-in-the-project)
+a parabola through the winner and its two neighbours takes Middlebury v3 bad-1.0 from
+41.5% to 25.18% at unchanged coverage, and switching to the equiangular estimator
+for the piecewise-linear graded cost takes it to 24.47%.
 
 ### Coarse-to-fine
 
@@ -580,11 +581,11 @@ The 2005 archives do not document their disparity scale.
 therefore *establishes* the factor of 3 with an identity check rather than assuming
 it.
 
-> D. Scharstein, R. Szeliski (2003). *High-accuracy stereo depth maps using
-> structured light.* CVPR, 195-202.
+> Scharstein, D., & Szeliski, R. (2003). *High-accuracy stereo depth maps using
+> structured light.* CVPR, 195–202.
 > [doi:10.1109/CVPR.2003.1211354](https://doi.org/10.1109/CVPR.2003.1211354)
 
-> D. Scharstein, C. Pal (2007). *Learning conditional random fields for stereo.*
+> Scharstein, D., & Pal, C. (2007). *Learning conditional random fields for stereo.*
 > CVPR. [doi:10.1109/CVPR.2007.383191](https://doi.org/10.1109/CVPR.2007.383191)
 
 ### Structured-light ground truth
@@ -604,8 +605,8 @@ Three numbers that have to be read together. *Coverage* is the fraction of pixel
 the matcher answers at all — a matcher with a [margin gate](#margin-and-the-margin-gate)
 answers fewer. *Precision* is the fraction of answered pixels with known ground
 truth that are correct within a tolerance (1 px throughout). *bad-1.0* is the
-complement, the percentage wrong by more than 1 px, and it is the metric Part 2
-reports because it is what the stereo literature reports. The product,
+complement, the percentage wrong by more than 1 px, and Part 2
+reports it because the stereo literature reports it. The product,
 coverage × (1 − bad), is *correct-over-known*: the share of all knowable pixels
 actually delivered correctly. Comparing two matchers on one of the three alone is
 how a matcher that mostly abstains looks excellent.
@@ -622,13 +623,13 @@ masquerade as an effect.
 
 ### ELAS
 
-Efficient Large-Scale Stereo Matching: match a sparse set of robust support points
+Efficient Large-Scale Stereo Matching: match a sparse set of support points
 first, triangulate them into a prior, and search only near the resulting surface.
 The canonical "don't sweep the whole disparity range" CPU matcher, and the direct
 ancestor of the [coarse-to-fine](#coarse-to-fine) experiment Part 2 measures.
 
-> A. Geiger, M. Roser, R. Urtasun (2011). *Efficient Large-Scale Stereo Matching.*
-> ACCV 2010, LNCS 6492, 25-38.
+> Geiger, A., Roser, M., & Urtasun, R. (2011). *Efficient large-scale stereo matching.*
+> ACCV 2010, LNCS 6492, 25–38.
 > [doi:10.1007/978-3-642-19315-6_3](https://doi.org/10.1007/978-3-642-19315-6_3)
 
 ### PatchMatch stereo
@@ -637,8 +638,8 @@ Avoids the sweep from the other direction: instead of testing every disparity,
 propagate good hypotheses — including slanted support planes — between neighbouring
 pixels and refine them randomly.
 
-> M. Bleyer, C. Rhemann, C. Rother (2011). *PatchMatch Stereo — Stereo Matching
-> with Slanted Support Windows.* BMVC.
+> Bleyer, M., Rhemann, C., & Rother, C. (2011). *PatchMatch Stereo — Stereo matching
+> with slanted support windows.* BMVC.
 > [doi:10.5244/C.25.14](https://doi.org/10.5244/C.25.14)
 
 ### rSGM
@@ -648,13 +649,13 @@ subsampled far disparities, reaching VGA at 128 disparities above 16 Hz on a
 desktop CPU. The reference point for "how fast should a careful CPU stereo matcher
 be".
 
-> M. Spangenberg, T. Langner, S. Adfeldt, R. Rojas (2014). *Large scale
-> Semi-Global Matching on the CPU.* IEEE Intelligent Vehicles Symposium.
+> Spangenberg, M., Langner, T., Adfeldt, S., & Rojas, R. (2014). *Large scale
+> semi-global matching on the CPU.* IEEE Intelligent Vehicles Symposium, 1118–1124.
 > [doi:10.1109/IVS.2014.6856419](https://doi.org/10.1109/IVS.2014.6856419)
 
 ### ReS2tAC
 
-Real-time SGM on exactly the hardware class this project targets — embedded ARM
+Real-time SGM on the exact hardware class this project targets — embedded ARM
 with NEON, and CUDA on Jetson-class GPUs. Two of its design decisions were re-derived independently here before being
 recognised:
 
@@ -664,13 +665,13 @@ recognised:
 It is the closest published prior art to this pipeline's engineering, on both
 processors.
 
-> B. Ruf, J. Mohrs, M. Weinmann, S. Hinz, J. Beyerer (2021). *ReS2tAC — UAV-Borne
-> Real-Time SGM Stereo Optimized for Embedded ARM and CUDA Devices.* Sensors
+> Ruf, B., Mohrs, J., Weinmann, M., Hinz, S., & Beyerer, J. (2021). *ReS2tAC — UAV-borne
+> real-time SGM stereo optimized for embedded ARM and CUDA devices.* Sensors,
 > 21(11), 3938. [doi:10.3390/s21113938](https://doi.org/10.3390/s21113938)
 
 ### Intrinsic curves
 
-A representation from Tomasi & Manduchi (1998) in which a scanline is a *trajectory* in
+A representation from Tomasi and Manduchi (1998) in which a scanline is a *trajectory* in
 a small feature space — intensity and its derivative along the row — rather than a
 sequence of pixels. Matching becomes a nearest-neighbour query in that space. A left pixel's candidate
 disparities are the right pixels lying close to it on the curve, and a spatial index
@@ -689,11 +690,11 @@ A per-pixel reduction that is spatially incoherent can be spent by a matcher sco
 candidates individually, which that paper's SGM does. It cannot be spent by
 one that aggregates costs over whole constant-disparity planes.
 
-> Tomasi, C. & Manduchi, R. (1998). *Stereo Matching as a Nearest-Neighbor Problem.*
-> IEEE TPAMI 20(3):333-340. [doi:10.1109/34.667884](https://doi.org/10.1109/34.667884)
+> Tomasi, C., & Manduchi, R. (1998). *Stereo matching as a nearest-neighbor problem.*
+> IEEE Transactions on Pattern Analysis and Machine Intelligence, 20(3), 333–340. [doi:10.1109/34.667884](https://doi.org/10.1109/34.667884)
 >
-> Shahbazi, M., Sohn, G., Théau, J. & Menard, P. (2016). *Revisiting Intrinsic Curves
-> for Efficient Dense Stereo Matching.* ISPRS Annals III-3:123-130.
+> Shahbazi, M., Sohn, G., Théau, J., & Menard, P. (2016). *Revisiting intrinsic curves
+> for efficient dense stereo matching.* ISPRS Annals, III-3, 123–130.
 > [doi:10.5194/isprs-annals-III-3-123-2016](https://doi.org/10.5194/isprs-annals-III-3-123-2016)
 
 [p2-icsg]: https://www.mariolueder.com/2026-08-08-Dense-MASDA-Belief-Propagation-Stereo-on-a-Jetson/
@@ -704,8 +705,8 @@ Slanted PatchMatch made real-time for spacetime stereo, with edge-aware
 aggregation under shared plane hypotheses — which is why Part 2 lists it among the
 work behind this pipeline's aggregation stage.
 
-> H. Nover, S. Achar, D. B. Goldman (2018). *ESPReSSo: Efficient Slanted
-> PatchMatch for Real-Time Spacetime Stereo.* 3DV.
+> Nover, H., Achar, S., & Goldman, D. B. (2018). *ESPReSSo: Efficient slanted
+> PatchMatch for real-time spacetime stereo.* 3DV, 578–586.
 > [doi:10.1109/3DV.2018.00072](https://doi.org/10.1109/3DV.2018.00072)
 
 ### GPU-efficient recursive filtering
@@ -716,8 +717,8 @@ truncation bit-for-bit, and bit-identity was the referee. The entry is here beca
 the existence of that paper is also the explanation of why the warp-serial
 alternative loses.
 
-> D. Nehab, A. Maximo, R. S. Lima, H. Hoppe (2011). *GPU-Efficient Recursive
-> Filtering and Summed-Area Tables.* ACM TOG 30(6), SIGGRAPH Asia.
+> Nehab, D., Maximo, A., Lima, R. S., & Hoppe, H. (2011). *GPU-efficient recursive
+> filtering and summed-area tables.* ACM Transactions on Graphics, 30(6), 176 (SIGGRAPH Asia).
 > [doi:10.1145/2024156.2024210](https://doi.org/10.1145/2024156.2024210)
 
 ## Hardware and implementation
@@ -812,7 +813,7 @@ is the reference.
 ### Constant and shared memory
 
 Two of the GPU's addressable memories. `__constant__` is optimised for *broadcast*
-— all lanes reading one address — and serializes into replays when lanes read
+— all lanes reading one address — and serialises into replays when lanes read
 different addresses, which 32 different Hamming distances per warp do by
 construction. Shared memory is per-block scratch with no such penalty, and moving
 the lookup tables there was worth ~2 ms in Part 3.
@@ -830,7 +831,7 @@ memory-coherency model this violates.
 
 ### Kernel fusion
 
-Merging two passes so the intermediate never reaches memory. Part 3 states the principle as: *a pass that stores exactly what the next pass
+Merging two passes so the intermediate never reaches memory. Part 3 states the principle as: *a pass that stores what the next pass
 reads is a fusion candidate, and a store nothing reads afterwards is a bug costing
 you time.*
 
@@ -847,9 +848,9 @@ into arithmetic. A kernel at 19 GB/s is leaving half the machine idle, and the s
 number says when to *stop*. The roofline model is the formal
 version of this reasoning.
 
-> S. Williams, A. Waterman, D. Patterson (2009). *Roofline: an insightful visual
-> performance model for multicore architectures.* Communications of the ACM 52(4),
-> 65-76. [doi:10.1145/1498765.1498785](https://doi.org/10.1145/1498765.1498785)
+> Williams, S., Waterman, A., & Patterson, D. (2009). *Roofline: An insightful visual
+> performance model for multicore architectures.* Communications of the ACM, 52(4),
+> 65–76. [doi:10.1145/1498765.1498785](https://doi.org/10.1145/1498765.1498785)
 
 ### Amdahl's law
 
@@ -859,8 +860,8 @@ serial. Quoted here because it was the answer after five wrong guesses. The work
 a serial-ish merge *outside* the pool. The instrument that showed it — per-thread
 span printed next to per-thread busy — is the transferable part.
 
-> G. M. Amdahl (1967). *Validity of the single processor approach to achieving
-> large scale computing capabilities.* AFIPS Spring Joint Computer Conference.
+> Amdahl, G. M. (1967). *Validity of the single processor approach to achieving
+> large scale computing capabilities.* AFIPS Spring Joint Computer Conference, 483–485.
 > [doi:10.1145/1465482.1465560](https://doi.org/10.1145/1465482.1465560)
 
 ### Autovectorisation

@@ -11,17 +11,17 @@ author: Mario Lüder
 tags: [belief-propagation, data-association, autonomous-driving, algorithms]
 ---
 
-This presents a data association algorithm I call MASDA (Max-Sum Algorithm Data Association) which relies on message passing in a factor graph. 
+This article presents MASDA (Max-Sum Algorithm Data Association), a data association algorithm that passes messages on a factor graph.
 
-I derived the formula presented here using the very same approach as in the paper:
+I derived the formula presented here using the same binary-variable formulation as Givoni and Frey (2009):
 
-> Givoni, Inmar & Frey, Brendan. (2009). [A Binary Variable Model for Affinity Propagation](https://www.researchgate.net/publication/23975825_A_Binary_Variable_Model_for_Affinity_Propagation). Neural Computation. 21. 1589-1600. 10.1162/neco.2009.05-08-785.
+> Givoni, I. E., & Frey, B. J. (2009). *A binary variable model for affinity propagation.* Neural Computation, 21(6), 1589–1600. [doi:10.1162/neco.2009.05-08-785](https://doi.org/10.1162/neco.2009.05-08-785)
 
-Further, I describe the relation to SPADA (Sum-Product Algorithm Data Association). The Paper *Message Passing Algorithms for Scalable Multitarget Tracking* by Florian Meyer discusses SPADA for object tracking purposes in detail.
+I also compare MASDA with SPADA (Sum-Product Algorithm Data Association). Meyer et al. (2018) cover SPADA for multi-target tracking in detail:
 
-> Meyer, Florian & Kropfreiter, Thomas & Williams, Jason & Lau, Roslyn & Hlawatsch, Franz & Braca, Paolo & Win, Moe. (2018). Message Passing Algorithms for Scalable Multitarget Tracking. Proceedings of the IEEE. 106. 221-259. 10.1109/JPROC.2018.2789427.
+> Meyer, F., Kropfreiter, T., Williams, J. L., Lau, R., Hlawatsch, F., Braca, P., & Win, M. Z. (2018). *Message passing algorithms for scalable multitarget tracking.* Proceedings of the IEEE, 106(2), 221–259. [doi:10.1109/JPROC.2018.2789427](https://doi.org/10.1109/JPROC.2018.2789427)
 
-At the end there is a naive Python implementation, so the mathematics above has a working example beside it.
+At the end is a worked Python implementation that executes the equations directly.
 
 ## Introduction
 
@@ -36,13 +36,13 @@ Consider a scenario in autonomous driving or surveillance where a vehicle is equ
 - an existing object was not detected in this scan (a *missed detection*, or *misdetection*);
 - or the measurement is spurious (*clutter*).
 
-For example, suppose a radar detects a blob at a certain position. In that case, the data association algorithm must decide if this blob is the same car it measured in a previous scan, a newly appeared pedestrian, or just sensor noise. Incorrectly associating a new measurement with an old track can lead to track swapping, where the system believes it's still tracking the original object but is actually tracking a different one. This can have severe consequences, such as an autonomous vehicle mispredicting the behavior of surrounding traffic.
+For example, suppose a radar detects a blob at a certain position. The data association algorithm must decide whether this blob is the same car it measured in a previous scan, a newly appeared pedestrian, or sensor noise. Associating a new measurement with the wrong track causes track swapping: the system believes it is still following the original object while actually following a different one. In autonomous driving, that misleads downstream motion prediction.
 
 **Example 2: Data Association in Simultaneous Localization and Mapping (SLAM)**
 
 In SLAM, a mobile robot or agent builds a map of an unknown environment while simultaneously estimating its own position within that map. Get the association wrong and both the map and the robot's own position are wrong with it. A robot observes a feature with its sensors: a corner, a door, a landmark. It then has to decide whether that feature is already present in its growing map, or is a new one to be added. This is known as feature association or loop closure detection (when the robot revisits a previously mapped area).
 
-Suppose the robot associates a newly observed feature with an existing map feature that is actually a different one. That introduces errors into both the map and its own estimated pose: duplicate features, and skewed map geometry. The opposite failure costs as much. If the robot does not recognise a feature it has seen before, it concludes it is somewhere new, and the map grows a second copy of a place it had already mapped.
+Suppose the robot associates a newly observed feature with an existing map feature that is actually a different one. That introduces errors into both the map and its own estimated pose: duplicate features, and skewed map geometry. The opposite failure costs as much. If the robot does not recognise a feature it has seen before, it concludes it is somewhere new. The map then grows a second copy of a place it had already mapped.
 
 Data association algorithms are also needed in other fields, such as medicine, statistics, biology, and weather forecasting, to name a few. The terminology differs in those fields. This article uses *measurements* and *detections* throughout, for the entities describing a state of the system perceived without prior knowledge from a previous scan. These might be raw measurements, such as positions, or already processed data, such as clusters and features. Objects describe an accumulated, maybe "learned" state or just a previous state of the system. The two words can also separate two sensors rather than two times. In a multi-sensor setup with overlapping fields of view, "measurements" may be the data from one sensor and "objects" the data from another.
 
@@ -62,7 +62,7 @@ The Jonker-Volgenant Algorithm was developed to improve upon the Hungarian Algor
 
 ## Factor Graphs for Data Association
 
-Four properties of the factor graph matter for data association. Each one is about what the representation makes cheap, not about how it looks.
+Four properties of the factor graph matter for data association. Each property reduces the computational complexity of the solver rather than merely organising the notation.
 
 **The decisions and the rules are separate nodes.** Variable nodes carry the decisions: whether measurement $$i$$ is associated with object $$j$$, and whether it is clutter instead. Factor nodes carry everything that scores or restricts those decisions: the similarity of a pair, and the rule that a measurement may be used once. Keeping them apart is what makes the other three properties possible.
 
@@ -92,68 +92,33 @@ Depending on the message-passing algorithm used:
 
 ### SPADA (Sum Product Algorithm Data Association) and MASDA (Max-Sum Algorithm Data Association)
 
-SPADA is a method for solving data association problems using the Sum-Product Algorithm (SPA), also known as Belief Propagation. The Max-Sum algorithm, demonstrated below, finds the single best assignment: the maximum a posteriori, or MAP, estimate. The Sum-Product Algorithm instead computes a marginal probability for every possible assignment. SPADA therefore gives a more complete probabilistic account of the associations, at the cost of more computation.
+SPADA and MASDA run on the same factor graph — binary association variables $$c_{ij}$$, clutter variables $$e_i$$, misdetection variables $$d_j$$, similarity factors, and mutual exclusivity constraints — and differ only in the operator inside the factor-to-variable update:
 
-*Here's a breakdown:*
+1. **Variable-to-Factor Messages:** In the probability domain, a variable node sends the product of all incoming messages from its other connected factors. In the log-domain, that product becomes a sum.
+2. **Factor-to-Variable Messages:** Combine the factor's own potential with the incoming messages from all other variables connected to that factor, then eliminate those other variables:
+   - **SPADA (Sum-Product)** *sums* over the other variables (or uses `log-sum-exp` in the log-domain to prevent numerical underflow). Once messages settle, each variable's belief gives the marginal probability $$P(c_{ij}=1)$$, $$P(e_i=1)$$, or $$P(d_j=1)$$.
+   - **MASDA (Max-Sum)** *maximises* over the other variables. Once messages settle, the beliefs identify the single most likely joint assignment (the MAP estimate).
 
-Instead of just finding the most likely configuration, SPADA computes the marginal probability for each potential association variable: the probability that measurement i is associated with object j, for instance.
-It operates on a factor graph, similar to Max-Sum, but the messages passed between nodes represent probability distributions (or likelihoods in the log-domain), rather than just 'scores' or 'costs'.
-
-*Factor Graph Representation*
-
-Variable nodes represent potential associations: $$c_{ij}$$ for associating measurement $$i$$ with object $$j$$, $$e_i$$ for clutter, $$d_j$$ for misdetection. Factor nodes represent the relationships and constraints between those variables — the similarity costs, and the mutual exclusivity constraints.
-
-*Messages in SPADA*
-
-In the Sum-Product Algorithm, messages are typically represented as functions (or vectors) over the possible states of the variable they are being sent to.
-
-**Variable-to-Factor Messages:** A message from a variable node to a factor node is the product of all incoming messages from other factor nodes connected to that variable.
-
-**Factor-to-Variable Messages:** a message from a factor node to a variable node is computed in two steps.
-
-1. Multiply the factor's function by every incoming message from the other variable nodes connected to that factor.
-2. Sum, or integrate, over all variables except the recipient.
-
-The 'sum' in Sum-Product is that second step. Max-Sum maximises there instead, which is its 'max'.
-
-Messages are iteratively passed until they converge (or for a fixed number of iterations). Once messages converge, the belief (or marginal probability distribution) for each variable node can be computed by multiplying all messages received by that variable node.
-These beliefs are the marginal probabilities of each possible association: $$P(c_{ij}=1)$$, $$P(e_i=1)$$ and $$P(d_j=1)$$.
-
-*Key Differences from Max-Sum (MASDA)*
-
-Max-Sum aims for the MAP assignment, SPADA for marginal probabilities. Therefore Max-Sum uses max and sum operations, while SPADA uses sum and product operations.
-
-In the log-domain SPADA uses log-sum-exp and sum instead. That prevents underflow, and it replaces multiplication with addition.
-Max-Sum typically gives a hard assignment (0 or 1 for each $$c_{ij}$$). SPADA provides probabilities (values between 0 and 1) for each association.
-Where the right answer is ambiguous, SPADA says so with a number instead of picking one.
-
-*Advantages of SPADA*
-
-SPADA returns the uncertainty rather than hiding it. Where several assignments are plausible it gives each a non-zero probability instead of choosing between them. Those marginals are numbers a consumer can carry: an expected value, a variance, or a weight on a track that does not have to be accepted or discarded outright.
-
-*Applications*
-
-SPADA is used where the probability itself is wanted, not just the winner: multi-target tracking, sensor fusion, and the part of SLAM that has to weigh one candidate map update against another.
-In short: Max-Sum finds the best way to associate measurements with objects. SPADA says how likely each possible association is, which is a more complete picture of the uncertainty in the system.
+Where several assignments are plausible, SPADA retains the uncertainty by assigning a probability in $$[0, 1]$$ to each candidate. That is the right output for multi-target trackers or SLAM back-ends that weight multiple hypotheses rather than committing to one. When a downstream consumer wants a single hard decision per measurement — as in stereo matching — MASDA finds it directly and avoids evaluating `log-sum-exp`.
 
 
 ## MASDA
 
-MASDA, or Max-Sum Algorithm Data Association, is an iterative message-passing algorithm used to find the most likely (Maximum A Posteriori or MAP) assignment in data association problems. It operates on a factor graph, which visually represents the variables involved and the relationships (factors) between them.
+MASDA is an iterative message-passing algorithm that finds the maximum a posteriori (MAP) assignment on the data association factor graph.
 
 ### Factor Graph Structure
 
-The factor graph structure for MASDA remains the same as before. The architecture and the derivation below follows closely the ideas in [A Binary Variable Model for Affinity Propagation](https://www.researchgate.net/publication/23975825_A_Binary_Variable_Model_for_Affinity_Propagation)
+The factor graph structure and the derivation below follow the binary-variable formulation in [Givoni and Frey (2009)](https://doi.org/10.1162/neco.2009.05-08-785).
 
-**Variable Nodes** (circles — $$c_{ij}$$, $$e_i$$, $$d_j$$): These represent the decisions or unknowns we want to infer:
+**Variable Nodes** (circles — $$c_{ij}$$, $$e_i$$, $$d_j$$) represent the binary decisions to infer:
 
-  * $$c_{ij}$$: Binary variables indicating whether measurement $$i$$ is associated with object $$j$$ ($$c_{ij}=1$$) or not ($$c_{ij}=0$$).
-  * $$e_i$$: Binary variables indicating whether measurement $$i$$ is 'clutter' (not associated with any existing object).
-  * $$d_j$$: Binary variables indicating whether object $$j$$ is 'misdetected' (not associated with any measurement).
+  * $$c_{ij} \in \{0, 1\}$$: whether measurement $$i$$ is associated with object $$j$$ ($$c_{ij}=1$$) or not ($$c_{ij}=0$$).
+  * $$e_i \in \{0, 1\}$$: whether measurement $$i$$ is clutter or a newly born object (not associated with any existing object).
+  * $$d_j \in \{0, 1\}$$: whether object $$j$$ is misdetected (not associated with any measurement).
 
-**Factor Nodes** (squares — $$s_{ij}$$, $$\Lambda_i$$, $$\Gamma_j$$, $$E_j$$, $$I_i$$): These represent functions that define relationships, costs, or constraints between the connected variable nodes:
+**Factor Nodes** (squares — $$S_{ij}$$, $$\Lambda_i$$, $$\Gamma_j$$, $$I_i$$, $$E_j$$) encode the scores and constraints on those variables:
 
-*Similarity Factors* ($$s_{ij}$$): a factor $$S_{ij}(c_{ij})$$ encodes the cost or similarity of associating measurement $$i$$ with object $$j$$. When $$c_{ij}=1$$, its value is $$s(i,j)$$ (the similarity score); otherwise, it's 0. These are essentially priors for specific associations.
+*Similarity Factors* ($$S_{ij}$$): encodes the log-likelihood or similarity score $$s(i,j)$$ of associating measurement $$i$$ with object $$j$$:
 
 $$
 S_{ij}(c_{ij})  =
@@ -163,7 +128,7 @@ S_{ij}(c_{ij})  =
 \end{cases}
 $$
 
-*Clutter Factors* ($$\Lambda_i$$): a factor $$\Lambda_i(e_i)$$ represents the cost or prior probability that measurement $$i$$ is clutter. If $$e_i=1$$, its value is $$\lambda(i)$$; otherwise, it's 0.
+*Clutter Factors* ($$\Lambda_i$$): encodes the score $$\lambda(i)$$ of declaring measurement $$i$$ to be clutter:
 
 $$
 \Lambda_{i}(e_{i})  =
@@ -173,7 +138,7 @@ $$
 \end{cases}
 $$
 
-*Misdetection Factors* ($$\Gamma_j$$): a factor $$\Gamma_j(d_j)$$ represents the cost or prior probability that object $$j$$ is misdetected. If $$d_j=1$$, its value is $$\gamma(j)$$; otherwise, it's 0.
+*Misdetection Factors* ($$\Gamma_j$$): encodes the score $$\gamma(j)$$ of declaring object $$j$$ to be misdetected:
 
 $$
 \Gamma_{j}(d_{j})  =
@@ -183,136 +148,121 @@ $$
 \end{cases}
 $$
 
-Constraint Factors ($$I_i$$ and $$E_j$$): these enforce the rules of data association.
+*Constraint Factors* ($$I_i$$ and $$E_j$$): enforce mutual exclusivity.
 
-*Measurement Constraint Factors* ($$I_i$$): (For each measurement $$i$$) This factor ensures that each measurement $$i$$ is either associated with exactly one object, or it is declared as clutter ($$e_i=1$$). The function $$I_i(c_{i1}, \dots, c_{iN}, e_i)$$ evaluates to $$-\infty$$ if $$e_i + \sum_j c_{ij} \neq 1$$, and to $$0$$ otherwise. In the log-domain a score of $$-\infty$$ is not an expensive option, it is an unavailable one: nothing finite can be added to it to bring it back.
+*Measurement Constraint Factors* ($$I_i$$): for each measurement $$i$$, enforces that $$i$$ is either associated with exactly one object or declared as clutter ($$e_i=1$$). The function $$I_i(c_{i1}, \dots, c_{iN}, e_i)$$ evaluates to $$-\infty$$ if $$e_i + \sum_j c_{ij} \neq 1$$, and to $$0$$ otherwise. In the log-domain a score of $$-\infty$$ is not a high-cost option, it is a forbidden one: no finite score can overcome it.
 
 $$
 I_{i}(c_{i1},\dots,c_{iN}, e_i)  =
 \begin{cases}
-    -∞,& \text{if } e_i + \sum_i c_{ij} \neq 1\\
+    -\infty,& \text{if } e_i + \sum_j c_{ij} \neq 1\\
     0,              & \text{otherwise}
 \end{cases}
 $$
 
-*Object Constraint Factors* ($$E_j$$): (For each object $$j$$) This factor ensures that each object $$j$$ is either associated with exactly one measurement, or it is declared as misdetected ($$d_j=1$$). The function $$E_j(c_{1j}, \dots, c_{Nj}, d_j)$$ evaluates to $$-\infty$$ if $$d_j + \sum_i c_{ij} \neq 1$$. Otherwise, it's 0.
+*Object Constraint Factors* ($$E_j$$): for each object $$j$$, enforces that $$j$$ is either associated with exactly one measurement or declared as misdetected ($$d_j=1$$). The function $$E_j(c_{1j}, \dots, c_{Mj}, d_j)$$ evaluates to $$-\infty$$ if $$d_j + \sum_i c_{ij} \neq 1$$, and to $$0$$ otherwise.
 
 
 $$
-E_{j}(c_{1j},\dots,c_{Nj},d_j)  =
+E_{j}(c_{1j},\dots,c_{Mj},d_j)  =
 \begin{cases}
-    -∞,& \text{if } d_j + \sum_j c_{ij} \neq 1\\
+    -\infty,& \text{if } d_j + \sum_i c_{ij} \neq 1\\
     0,              & \text{otherwise}
 \end{cases}
 $$
 
-### Objective Function:
-The goal of MASDA is to find the assignment of all $$c_{ij}$$, $$e_i$$, and $$d_j$$ variables that maximizes the total score (or minimizes total cost) as defined by the objective function $$\mathcal{S}$$:
+### Objective Function
+
+MASDA seeks the assignment of all $$c_{ij}$$, $$e_i$$, and $$d_j$$ variables that maximises the total score $$\mathcal{S}$$:
 
 $$
-\mathcal{S}(\dots) = \sum_{i,j}S_{ij}(c_{ij}) + \sum_{j}\Gamma_{j}(d_{j}) + \sum_{i}\Lambda_{i}(e_{i}) + \sum_{i}I_{i}(c_{i1},\dots,c_{iN}, e_i) + \sum_{j}E_{j}(c_{1j},\dots,c_{Nj}, d_j)
+\mathcal{S}(\dots) = \sum_{i,j}S_{ij}(c_{ij}) + \sum_{j}\Gamma_{j}(d_{j}) + \sum_{i}\Lambda_{i}(e_{i}) + \sum_{i}I_{i}(c_{i1},\dots,c_{iN}, e_i) + \sum_{j}E_{j}(c_{1j},\dots,c_{Mj}, d_j)
 $$
 
-This function sums up all the similarity/cost factors for associations, clutter, misdetections, and critically, applies the penalties for violating the mutual exclusivity constraints.
+This objective sums the unary scores for associations, clutter, and misdetections, while $$I_i$$ and $$E_j$$ assign $$-\infty$$ to any configuration that violates one-to-one exclusivity.
 
 
 
-### Message Passing (The "Max-Sum" part):
-MASDA works by iteratively passing "messages" between the variable and factor nodes. These messages represent beliefs or preferences about the state of the variables. The algorithm is typically run in the log-domain, so "sum" replaces "product" and "max" replaces "sum" from the original Sum-Product algorithm. The messages passed are essentially scores.
+### Message Passing (Max-Sum)
 
-**Variable-to-Factor Messages:** A variable node $$x$$ sends a message to a factor node $$f$$ that is the sum of all incoming messages to $$x$$ from other factor nodes (excluding $$f$$).
+MASDA passes messages iteratively between the variable and factor nodes in the log-domain, where products become sums and marginalisation is replaced by maximisation.
+
+**Variable-to-Factor Messages:** A variable node $$x$$ sends to factor node $$f$$ the sum of all messages arriving at $$x$$ from its other neighbouring factors:
 
 $$
-\mu_{x\rightarrow f}(x) = \sum_{\{l|f_l \in \text{ne}(x) \setminus f\}}\mu_{f_l\rightarrow x}(x)
+\mu_{x\rightarrow f}(x) = \sum_{f_l \in \text{ne}(x) \setminus \{f\}}\mu_{f_l\rightarrow x}(x)
 $$
 
-**Factor-to-Variable Messages:** a factor node $$f$$ sends a message to a variable node $$x$$ in three steps.
+**Factor-to-Variable Messages:** A factor node $$f$$ sends a message to variable node $$x$$ in three steps:
 
-1. Sum the messages from the other variables connected to $$f$$, excluding $$x$$.
+1. Sum the incoming messages from the other variables connected to $$f$$, excluding $$x$$.
 2. Add $$f$$'s own function value.
-3. Take the maximum over all possible assignments of those other variables.
+3. Maximise over all assignments of those other variables.
 
 $$
-\mu_{f_l\rightarrow x}(x) = \max_{x_1,\dots,x_M}\left[f(x, x_1, \dots, x_m) + \sum_{\{m|x_m \in \text{ne}(f) \setminus x\}}\right]
+\mu_{f\rightarrow x}(x) = \max_{x_1,\dots,x_M}\left[f(x, x_1, \dots, x_M) + \sum_{x_m \in \text{ne}(f) \setminus \{x\}} \mu_{x_m \rightarrow f}(x_m)\right]
 $$
 
-    
+
 ![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_10_0.png)
-    
-    
+
+
 ![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_11_0.png)
-    
-    
+
+
 ![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_12_0.png)
-    
 
 
-The messages for the binary nodes $$c_{ij}$$, $$e_i$$, $$d_j$$ can be theoretically expressed with with a two-valued vector. But this is for our purpose of finding the best association, a MAP estimate, not necessary. Propagating its differences, a scalar, is enough as the two values can be recovered from this difference up to an additive constant factor.
 
-For example: The message from Factor $$I_j$$ to the variable $$c_{ij}$$ is denoted with $$\beta_{ij}(m)$$
+The message on a binary variable $$c_{ij}$$, $$e_i$$ or $$d_j$$ is a two-element vector, one score for state $$0$$ and one for state $$1$$. For a MAP estimate only the difference between the two states matters, because adding a constant to both leaves the argmax unchanged. Each message therefore reduces to a single scalar.
+
+For example, the message from variable $$c_{ij}$$ to factor $$I_i$$ is denoted $$\beta_{ij}(m)$$ for $$m \in \{0,1\}$$:
+
 $$
 \beta_{ij}(m) = \mu_{c_{ij} \rightarrow I_i}(m)
 $$
-where
-$$
-m \in \{0,1\}
-$$
-The scalar message difference is denoted
+
+Its scalar message difference is
+
 $$
 \beta_{ij} = \beta_{ij}(1) - \beta_{ij}(0)
 $$
-This notation is also used for the messages $$\alpha_{ij}$$, $$\rho_{ij}$$ and $$\eta_{ij}$$
+
+The same scalar difference notation applies to $$\alpha_{ij}$$, $$\rho_{ij}$$, and $$\eta_{ij}$$.
 
 
-### Variable to Factor Messages
+### Variable-to-Factor Messages
 
-These messages are just computed by the sum of the incoming messages, as stated above.
+Each variable-to-factor message is the sum of the incoming messages from the other factors connected to that variable.
 
-In order to simplify the notation we substitude the variables of the nodes and factors as follows
-
-$$
-c_{i,n+1} = e_i
-$$
+To unify the notation, we write the clutter and misdetection variables as an extra column $$n+1$$ and an extra row $$m+1$$:
 
 $$
-c_{m+1,j} = d_j
+\begin{aligned}
+c_{i,n+1} &= e_i, & S_{i,n+1} &= \Lambda_i, & s(i,n+1) &= \lambda_i \\
+c_{m+1,j} &= d_j, & S_{m+1,j} &= \Gamma_j,  & s(m+1,j) &= \gamma_j
+\end{aligned}
 $$
 
-$$
-S_{i,n+1} = \Lambda_i
-$$
+#### Message to $$I_i$$
 
-$$
-S_{m+1,j} = \Gamma_j
-$$
-
-$$
-s_{i,n+1} = \lambda_i
-$$
-
-$$
-s_{m+1,j} = \gamma_j
-$$
-
-#### Message To $$I$$
-
-for $$c_{ij} = 1$$:
+For $$c_{ij} = 1$$:
 
 $$
 \begin{align}
 \beta_{ij}(1) & = \mu_{c_{ij} \rightarrow I_i}(1) \\
-& = \sum_{\{l|f_l \in \text{ne}(c_{ij}) \setminus I_i\}}\mu_{f_l\rightarrow c_{ij}}(1) \\
+& = \sum_{f_l \in \text{ne}(c_{ij}) \setminus \{I_i\}}\mu_{f_l\rightarrow c_{ij}}(1) \\
 & = S_{ij}(1) + \alpha_{ij}(1)
 \end{align}
 $$
 
-for $$c_{ij} = 0$$:
+For $$c_{ij} = 0$$:
 
 $$
 \beta_{ij}(0) = S_{ij}(0) + \alpha_{ij}(0)
 $$
 
-Scalar message
+Taking the difference gives the scalar message:
 
 $$
 \begin{align}
@@ -323,9 +273,9 @@ $$
 \end{align}
 $$
 
-#### Message To $$E$$
+#### Message to $$E_j$$
 
-The derivation is similar to $$I$$
+By symmetry along the column:
 
 $$
 \begin{align}
@@ -334,47 +284,42 @@ $$
 \rho_{ij} & = \rho_{ij}(1) - \rho_{ij}(0) \\
 & = (S_{ij}(1) - S_{ij}(0)) + (\eta_{ij}(1) - \eta_{ij}(0)) \\
 & = s(i,j) + \eta_{ij}\\
-\rho_{m+1,j}(1) & = \gamma(j)
+\rho_{m+1,j} & = \gamma(j)
 \end{align}
 $$
 
-There is no message to the $$S$$ factor at it is used as a prior.
+No message is sent back to the unary factor $$S_{ij}$$; it has degree one, so its outgoing message is always the prior score $$s(i,j)$$.
 
-### Factor to Variable Messages
+### Factor-to-Variable Messages
 
-We make use of the previously given factor to variable message update equation. Again, we will fix $$c_{ij}$$ to $$0$$ and $$1$$ respectively. Any combination that violates the constraints evaluates to $$\infty$$ and is non optimal.
+We now evaluate the factor-to-variable update for $$c_{ij} = 1$$ and $$c_{ij} = 0$$. Any configuration that violates a constraint evaluates to $$-\infty$$ and drops out of the maximum.
 
 
-#### From $$I$$
+#### From $$I_i$$
 
-This constrains only rows, ensuring that one measurement is associated to one object or is clutter/birth.
+Factor $$I_i$$ constrains row $$i$$ so that measurement $$i$$ is associated with exactly one object or declared as clutter.
 
-for $$c_{ij} = 1$$, the association case
+When $$c_{ij} = 1$$ (measurement $$i$$ is associated with object $$j$$), every other variable $$c_{it}$$ in row $$i$$ must be $$0$$ for $$I_i$$ to evaluate to $$0$$:
 
 $$
 \begin{align}
 \eta_{ij}(1) & = \mu_{I_i\rightarrow c_{ij}}(1) \\
-& = \max_{c_{ik}, k \ne j}\left[I_i(c_{i1},\dots, c_{ik} = 1, \dots, c_{iN}) + \sum_{\{t|c_{it} \in \text{ne}(I_i) \setminus c_{ij}\}} \mu_{c_{it} \rightarrow I_i}(c_{it}) \right] \\
-& = \max_{c_{ik}, k \ne j}\left[I_i(c_{i1},\dots, c_{ik} = 1, \dots, c_{iN}) + \sum_{\{t|c_{it} \in \text{ne}(I_i) \setminus c_{ij}\}} \beta_{it}(c_{it}) \right] \\
+& = \max_{c_{ik}, k \ne j}\left[I_i(c_{i1},\dots, c_{ij} = 1, \dots, c_{i,n+1}) + \sum_{t \ne j} \beta_{it}(c_{it}) \right] \\
 & = \sum_{t \ne j} \beta_{it}(0)
 \end{align}
 $$
 
-This is as only one node in the neighborhood of $$I$$ can be set to $$1$$
-
-for $$c_{ij} = 0$$, the non association case
+When $$c_{ij} = 0$$ (measurement $$i$$ is not associated with object $$j$$), exactly one other variable $$c_{ik}$$ ($$k \neq j$$) in row $$i$$ must be set to $$1$$, and all remaining variables in row $$i$$ must be $$0$$:
 
 $$
 \begin{align}
 \eta_{ij}(0) & = \mu_{I_i\rightarrow c_{ij}}(0) \\
-& = \max_{c_{ik}, k \ne j}\left[I_i(c_{i1},\dots, c_{ik} = 0, \dots, c_{iN}) + \sum_{\{t|c_{it} \in \text{ne}(I_i) \setminus c_{ij}\}} \mu_{c_{it} \rightarrow I_i}(c_{it}) \right] \\
+& = \max_{c_{ik}, k \ne j}\left[I_i(c_{i1},\dots, c_{ij} = 0, \dots, c_{i,n+1}) + \sum_{t \ne j} \beta_{it}(c_{it}) \right] \\
 & = \max_{k \ne j}\left[\beta_{ik}(1) + \sum_{t \notin \{k,j\} } \beta_{it}(0) \right]
 \end{align}
 $$
 
-Exactly one of the variables in a row must be set to $$1$$, all the others must be set to $$0$$
-
-The scalar message is
+Subtracting the two states cancels every term in the sum except $$t = k$$, leaving a single scalar reduction:
 
 $$
 \begin{align}
@@ -386,34 +331,31 @@ $$
 \end{align}
 $$
 
-#### From $$E$$
+#### From $$E_j$$
 
-This can be derived similarly as the constraint is the same but ensures that only one vertical node is active (ensuring that one object is associated to one measurement)
+Factor $$E_j$$ applies the same one-of-many constraint to column $$j$$, ensuring that object $$j$$ associates with at most one measurement.
 
-for $$c_{ij} = 1$$ the association case
+When $$c_{ij} = 1$$:
 
 $$
 \begin{align}
 \alpha_{ij}(1) & = \mu_{E_j\rightarrow c_{ij}}(1) \\
-& = \max_{c_{kj}, k \ne i}\left[E_j(c_{1j},\dots, c_{kj} = 1, \dots, c_{Nj}) + \sum_{\{t|c_{tj} \in \text{ne}(E_j) \setminus c_{ij}\}} \mu_{c_{tj} \rightarrow E_j}(c_{tj}) \right] \\
-& = \max_{c_{kj}, k \ne i}\left[E_j(c_{1j},\dots, c_{kj} = 1, \dots, c_{Nj}) + \sum_{\{t|c_{tj} \in \text{ne}(E_j) \setminus c_{ij}\}} \rho_{tj}(c_{tj}) \right] \\
+& = \max_{c_{kj}, k \ne i}\left[E_j(c_{1j},\dots, c_{ij} = 1, \dots, c_{m+1,j}) + \sum_{t \ne i} \rho_{tj}(c_{tj}) \right] \\
 & = \sum_{t \ne i} \rho_{tj}(0)
 \end{align}
 $$
 
-for $$c_{ij} = 0$$, the non association case
+When $$c_{ij} = 0$$, exactly one other variable $$c_{kj}$$ ($$k \neq i$$) in column $$j$$ must be set to $$1$$:
 
 $$
 \begin{align}
 \alpha_{ij}(0) & = \mu_{E_j\rightarrow c_{ij}}(0) \\
-& = \max_{c_{kj}, k \ne i}\left[E_j(c_{1j},\dots, c_{kj} = 0, \dots, c_{Nj}) + \sum_{\{t|c_{tj} \in \text{ne}(E_j) \setminus c_{ij}\}} \mu_{c_{tj} \rightarrow E_j}(c_{tj}) \right] \\
+& = \max_{c_{kj}, k \ne i}\left[E_j(c_{1j},\dots, c_{ij} = 0, \dots, c_{m+1,j}) + \sum_{t \ne i} \rho_{tj}(c_{tj}) \right] \\
 & = \max_{k \ne i}\left[\rho_{kj}(1) + \sum_{t \notin \{k,i\} } \rho_{tj}(0) \right]
 \end{align}
 $$
 
-Exactly one of the variables in a column must be set to $$1$$, all the others must be set to $$0$$
-
-The scalar message is
+Taking the scalar difference cancels the common sum in the same way:
 
 $$
 \begin{align}
@@ -425,14 +367,14 @@ $$
 \end{align}
 $$
 
-#### From $$S$$
+#### From $$S_{ij}$$
 
-The scalar message send from the $$S_{ij}$$ function is always the similarity between $$i$$ and $$j$$, since $$s(i,j) = S_{ij}(1) - S_{ij}(0)$$
+The scalar message sent from the unary factor $$S_{ij}$$ is the similarity score $$s(i,j) = S_{ij}(1) - S_{ij}(0)$$.
 
 
 ## Summary
 
-As
+Collecting the six scalar equations derived above:
 
 $$
 \begin{align}
@@ -445,36 +387,38 @@ $$
 \end{align}
 $$
 
-### Combined
+### Combined Update
+
+Substituting $$\alpha_{ij}$$ and $$\eta_{ij}$$ into $$\beta_{ij}$$ and $$\rho_{ij}$$ eliminates two of the four message arrays, leaving one alternating pair of updates:
 
 $$
 \begin{align}
 \beta_{ij} & = s(i,j) - \max_{k \ne i}\rho_{kj} \\
-\rho_{ij} & = s(i,j) - \max_{k \ne j}\beta_{ik} \\
+\rho_{ij} & = s(i,j) - \max_{k \ne j}\beta_{ik}
 \end{align}
 $$
 
-### The belief
+### The Belief
 
-Is just the sum of the messages towards a variable node.
-
-$$
-\mu_{x}(x) = \sum_{\{l|f_l \in \text{ne}(x) \}}\mu_{f_l\rightarrow x}(x)
-$$
-
-Belief association between measurement and object
+The belief at a variable node is the sum of all incoming messages arriving at that node:
 
 $$
-b_{ij} = \alpha_{ij} + \eta_{ij} + s_{ij}
+\mu_{x}(x) = \sum_{f_l \in \text{ne}(x)}\mu_{f_l\rightarrow x}(x)
 $$
 
-Belief measurement is clutter or a new born object
+For an association between measurement $$i$$ and object $$j$$:
+
+$$
+b_{ij} = \alpha_{ij} + \eta_{ij} + s(i,j) = \beta_{ij} + \rho_{ij} - s(i,j)
+$$
+
+For measurement $$i$$ being clutter or a newly born object:
 
 $$
 b_{i,n+1} = \eta_{i,n+1} + \lambda_{i}
 $$
 
-Belief that an object was misdetected
+For object $$j$$ being misdetected:
 
 $$
 b_{m + 1, j} = \alpha_{m+1, j} + \gamma_{j}
@@ -483,62 +427,40 @@ $$
 
 ### Iterative Process
 
-These messages $$\beta$$ and $$\rho$$ are iteratively updated until convergence or for a fixed number of iterations. As messages propagate, information about similarities, clutter/misdetection likelihoods, and constraints are shared across the graph. This allows the algorithm to find a globally consistent assignment that satisfies as many preferences and constraints as possible.
+The messages $$\beta$$ and $$\rho$$ are updated alternately for a fixed number of iterations or until they settle. Each iteration subtracts the best competing alternative along the row and along the column, propagating local similarity scores and one-to-one exclusivity across the graph.
 
 
 ### Final Beliefs and Assignment
 
-After message passing, the final "belief" for each variable, $$c_{ij}$$ among them, is computed by summing all incoming messages to that variable from its connected factors. The assignment that maximizes this belief for each variable is chosen, resulting in a set of binary associations, cluttered measurements, and misdetected objects.
+After message passing, each variable's belief sums the evidence from both directions. Choosing the highest-belief option per row yields the binary associations, clutter declarations, and misdetected objects.
 
-That decode is the whole output. It is MASDA's answer to the data association problem, reached by passing local preferences and global constraints along the edges until they settle, and approximate because the graph is loopy.
+That decode is MASDA's output. It reaches a global assignment by passing local preferences and exclusivity constraints along the edges, and remains an approximation because the factor graph contains four-cycles.
 
 ### Computational Complexity: MASDA vs. Jonker-Volgenant
 
-The Jonker-Volgenant algorithm solves the Linear Assignment Problem exactly, in $$O(N^3)$$. Here $$N$$ is the number of items to be assigned — measurements or objects — after the problem has been augmented with the extra rows and columns that clutter and misdetection need.
+The Jonker-Volgenant (JV) algorithm solves the Linear Assignment Problem (LAP) to proven optimality in $$O(N^3)$$ time, where $$N$$ is the dimension of the cost matrix after augmenting it with clutter and misdetection rows and columns.
 
-This complexity holds when you have a well-defined cost matrix and are seeking a strict one-to-one assignment that minimizes total cost. JV is known for its speed and guaranteed optimality for LAP.
+MASDA is an approximate inference algorithm on a loopy factor graph. It is neither guaranteed to reach the exact MAP optimum nor guaranteed to converge, and in practice it runs for a fixed number of iterations $$T$$.
 
-MASDA is an iterative inference algorithm, a form of Belief Propagation. Its complexity, similar to SPADA, depends on the graph structure and the number of iterations.
+In a dense association graph with $$M$$ measurements and $$N$$ objects, each message update needs the maximum over a row or column excluding one entry. Because the "max excluding $$j$$" for an entire line only requires finding the line's largest and second-largest values, one iteration over a dense matrix takes $$O(M \cdot N)$$ operations, and $$T$$ iterations take $$O(T \cdot M \cdot N)$$. When candidate gating restricts the graph to $$E \ll M \cdot N$$ plausible edges, passing messages only along existing edges reduces the complexity to $$O(T \cdot E)$$.
 
-In a data association factor graph with $$M$$ measurements and $$N$$ objects, computing messages for MASDA involves performing 'max' operations over the neighbors of each node. The complexity per iteration is roughly proportional to two things: the number of edges, and the number of states a variable can take within a factor. That usually scales as O(M * N * K). Here K is related to the maximum degree of the nodes, or to the size of the variable domains within factors.
+*When to use which:*
 
-Loopy factor graphs are the normal case in data association, and on them MASDA is an approximate inference algorithm. It is not guaranteed to reach the globally optimal MAP assignment, and it is not guaranteed to converge at all. In practice it runs for a fixed number of iterations $$T$$, which makes the total complexity $$O(T \cdot M \cdot N \cdot K)$$.
-
-Note that for our purpose of data association, K is set 1.
-
-*Key Differences:*
-
-JV solves the Linear Assignment Problem provably optimally. MASDA solves the MAP problem on loopy graphs approximately. Its answers are usually close, and nothing guarantees it.
-
-Because MASDA passes messages, complex constraints go directly into the factor graph structure. One measurement per object, one object per measurement, clutter and misdetection all enter that way, with none of the matrix augmentation JV usually needs.
-
-For a pure LAP at moderate $$N$$, JV's $$O(N^3)$$ is the one to use. Here $$N$$ is the number of potential associations.
-
-At very large N, MASDA can scale better in practice, provided its factor graph is sparse and few iterations T are needed. That applies to problems JV would struggle to model directly without heavy pre-processing or approximation.
-
-In short: if the problem can be framed accurately as a pure Linear Assignment Problem, Jonker-Volgenant gives a guaranteed optimal solution.
-
-MASDA is the alternative where that framing does not hold. Three cases put it there:
-
-- probabilistic dependencies JV cannot express;
-- assignments that are not strictly one-to-one;
-- clutter and misdetection carried in the model rather than added by augmentation.
-
-Its solutions are approximate, and at a fixed number of iterations it is often faster as well.
+- For a pure one-to-one Linear Assignment Problem of moderate size, Jonker-Volgenant gives the exact optimum.
+- MASDA is the better choice in three situations:
+  - the graph is sparse ($$E \ll M \cdot N$$) and $$T$$ is small, where $$O(T \cdot E)$$ is much faster than $$O(N^3)$$ ([Part 1 of the stereo series](https://www.mariolueder.com/2026-08-07-MASDA-for-Sparse-Stereo-Matching/#5-speed-the-representation-decides-it) measures a 20× speed-up in Python before any compiled code);
+  - clutter and misdetection are carried directly as scalar thresholds inside the row and column reductions rather than by augmenting the matrix;
+  - additional pairwise constraints — such as geometric ordering or spatial smoothness — couple two associations, which turns the problem into one an assignment solver cannot express at all.
 
 ### Computational Complexity: MASDA vs. SPADA
 
-Both SPADA (Sum-Product Algorithm Data Association) and MASDA (Max-Sum Algorithm Data Association) are iterative message-passing algorithms operating on factor graphs.
-
-SPADA generally involves higher computational efforts compared to MASDA because it aims to compute marginal probabilities for each possible assignment, rather than just the single most likely assignment.
-No formula for it is derived here. Being iterative on a factor graph, SPADA has the same structure of complexity per iteration as MASDA. What differs is the operation: marginalisation needs 'sum', or log-sum-exp in the log-domain, and both are more demanding than MASDA's 'max'.
-The message computations in SPADA represent probability distributions, adding to the complexity compared to MASDA's scalar scores.
+Both SPADA and MASDA pass messages on the same factor graph and share the same asymptotic complexity per iteration. SPADA requires more work per edge because marginalisation evaluates `log-sum-exp` (exponentials and logarithms) across every row and column, whereas MASDA only tracks the two largest values via scalar comparisons.
 
 ## Implementation
 
-The implementation below is written to be read rather than to be fast. Much of it can be optimised, and the largest gain is in the sparse-matrix form.
+The implementation below is written for readability rather than speed. The naive nested loops below take $$O(M \cdot N^2)$$ per iteration because they re-scan each row and column; caching the top two values per line reduces that to $$O(M \cdot N)$$, and storing only plausible edges reduces it to $$O(E)$$.
 
-The problem shown here is an artificial one. Five measurements are given as two-dimensional positions. We got as well four object positions in 2D. The one-to-one association of measurements with objects might appear ambiguous for the human eye. One measurement can be associated to exacly one object or is clutter/new born. One object can be associated to exactly one measurement or is misdetected. Using just the euclidean distance might lead to a violation of these constraints.
+The synthetic example below places five measurements and four objects in a 2D plane. Three of the measurements cluster near three objects in the upper left, where nearest-neighbour Euclidean distance would assign multiple measurements to the same object. Each measurement may associate with at most one object or be declared clutter; each object may associate with at most one measurement or be declared misdetected.
 
 ### Includes
 ```python
@@ -594,7 +516,7 @@ plt.show()
 ![png](/assets/img/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_files/2025-11-26-Faster-Data-Association-with-Max-Sum-Loopy-Belief-Propagation-MASDA_25_0.png)
     
 
-### Shuffle the measurements and object
+### Shuffle the measurements and objects
 
 ```python
 # Get the number of measurements and objects
@@ -611,16 +533,16 @@ shuffled_meas_y = meas_y[shuffled_meas_indices]
 
 shuffled_objs_x = objs_x[shuffled_objs_indices]
 shuffled_objs_y = objs_y[shuffled_objs_indices]
-
 ```
 
-### Compute a distance matrix using the shuffeled measurements
+### Compute a distance matrix using the shuffled measurements
 
 ```python
 # Reshape shuffled measurements and objects for broadcasting
 shuffled_meas = torch.stack((shuffled_meas_x, shuffled_meas_y), dim=1)
 shuffled_objs = torch.stack((shuffled_objs_x, shuffled_objs_y), dim=1)
 
+# Or use the unshuffled order so the printed matrix below is deterministic:
 shuffled_meas = torch.stack((meas_x, meas_y), dim=1)
 shuffled_objs = torch.stack((objs_x, objs_y), dim=1)
 
